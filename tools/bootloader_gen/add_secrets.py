@@ -19,7 +19,7 @@ def pad(infile, contentfile, outfile, reserved_block):
         print("Not enough space for reserved block!")
         return
 
-    payload = data + b'\x00' * padding_needed + contents
+    payload = data + b'\xff' * padding_needed + contents
     with open(outfile, 'wb') as f:
         f.write(payload)
     print("Success!")
