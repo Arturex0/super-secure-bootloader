@@ -1,6 +1,3 @@
-// Copyright 2024 The MITRE Corporation. ALL RIGHTS RESERVED
-// Approved for public release. Distribution unlimited 23-02181-25.
-
 #include "bootloader.h"
 #include "secret_partition.h"
 #include "secrets.h"
@@ -114,48 +111,10 @@ int main(void) {
 		SysCtlReset();
 	}
 
-	// Check for magic number
-	uint32_t magic = *(uint32_t *)(SECRETS_BLOCK << 10);
-	if (magic == SECRETS_MAGIC_INDICATOR) {
-		uart_write_str(UART0, "Secrets have been detected, restarting!\n");
+	uart_write_str(UART0, "boot\n");
+	setup_secrets();
 
-		// compute address where keys are stored (should just be right after magic)
-		secrets_struct *secrets_location = (secrets_struct *) ((SECRETS_BLOCK << 10) + 4);
-		secrets_struct secrets;
-
-
-		//results of api calls for error checking
-		uint32_t result = 0;
-
-		//Erase EEPROM so we can write our keys
-		result = EEPROMMassErase();
-		if (result != 0) {
-			uart_write_str(UART0, "Failed to erase EEPROM, restarting\n");
-			SysCtlReset();
-		}
-		//backup secrets into memory before clearing flash
-		secrets = *secrets_location;
-
-		//clear flash before writing to EEPROM to ensure only one location contains secrets
-		result = FlashErase((SECRETS_BLOCK << 10));
-		if (result != 0) {
-			uart_write_str(UART0, "Failed to erase flash\n");
-			SysCtlReset();
-		}
-
-		
-		//store secrets into EEPROM
-		result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
-		if (result != 0) {
-			uart_write_str(UART0, "Failed to write EEPROM, retrying\n");
-			result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
-		}
-		
-		SysCtlReset();
-		//counter to test write
-
-	}
-	//uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
+	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
 	secrets_struct secrets;
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
