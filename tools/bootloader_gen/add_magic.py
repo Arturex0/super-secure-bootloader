@@ -1,6 +1,8 @@
 import sys
 import struct
 MAGIC = 0x00002137
+KEY_SIZE=16
+
 bytestring = struct.pack('<I', MAGIC)
 
 if len(sys.argv) != 3:
@@ -10,8 +12,11 @@ if len(sys.argv) != 3:
 inf = sys.argv[1]
 of = sys.argv[2]
 
-with open(inf, 'rb') as f:
-    data = f.read()
+with open(inf, 'r') as f:
+    vault_key = bytes.fromhex(f.readline())
+    decrypt_key = bytes.fromhex(f.readline())
+    hmac_key = bytes.fromhex(f.readline())
+data = vault_key + decrypt_key + hmac_key
 
 with open(of, 'wb') as f:
     payload = bytestring + data
