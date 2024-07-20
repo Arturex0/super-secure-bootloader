@@ -1,6 +1,3 @@
-# Copyright 2024 The MITRE Corporation. ALL RIGHTS RESERVED
-# Approved for public release. Distribution unlimited 23-02181-25.
-
 BOOTLOADER_ROOT=.
 LIB=../lib
 INC=./inc
@@ -48,6 +45,7 @@ wolfssl:
 
 bootloader: src/bootloader.o
 bootloader: src/startup_gcc.o
+bootloader: src/secret_partition.o
 
 bootloader:
 	mkdir -p bin

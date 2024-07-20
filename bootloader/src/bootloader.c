@@ -1,7 +1,6 @@
-// Copyright 2024 The MITRE Corporation. ALL RIGHTS RESERVED
-// Approved for public release. Distribution unlimited 23-02181-25.
-
 #include "bootloader.h"
+#include "secret_partition.h"
+#include "secrets.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -13,6 +12,8 @@
 #include "driverlib/flash.h"     // FLASH API
 #include "driverlib/interrupt.h" // Interrupt API
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
+
+#include "driverlib/eeprom.h"	 // EEPROM API
 
 // Application Imports
 #include "driverlib/gpio.h"
@@ -33,6 +34,7 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define METADATA_BASE 0xFC00 // base address of version and firmware size in Flash
 #define FW_BASE 0x10000      // base address of firmware in Flash
 
+
 // FLASH Constants
 #define FLASH_PAGESIZE 1024
 #define FLASH_WRITESIZE 4
@@ -42,6 +44,8 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define ERROR ((unsigned char)0x01)
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
+
+// Define secrets block (56th block)
 
 // Device metadata
 uint16_t * fw_version_address = (uint16_t *)METADATA_BASE;
@@ -78,6 +82,7 @@ void debug_delay_led() {
 
 
 int main(void) {
+	uint32_t eeprom_status;
 
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
@@ -93,6 +98,26 @@ int main(void) {
     // debug_delay_led();
 
     initialize_uarts(UART0);
+
+
+	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
+	while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0)) {
+	}
+
+	//make sure EEPROM is working
+	eeprom_status = EEPROMInit();
+	if (eeprom_status == EEPROM_INIT_ERROR) {
+		uart_write_str(UART0, "Fatal EEPROM error\n");
+		SysCtlReset();
+	}
+
+	uart_write_str(UART0, "boot\n");
+	setup_secrets();
+
+	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
+	secrets_struct secrets;
+	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
+	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
     uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");

@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-# Copyright 2024 The MITRE Corporation. ALL RIGHTS RESERVED
-# Approved for public release. Distribution unlimited 23-02181-25.
-
 """
 Bootloader Build Tool
 
@@ -13,17 +10,39 @@ import os
 import pathlib
 import subprocess
 
-REPO_ROOT = pathlib.Path(__file__).parent.parent.absolute()
-BOOTLOADER_DIR = os.path.join(REPO_ROOT, "bootloader")
+#change this once we decide on algorithm
+KEY_SIZE=16
 
+REPO_ROOT = pathlib.Path(__file__).parent.parent.absolute()
+TOOL_DIR = pathlib.Path(__file__).parent.absolute()
+GEN_DIR = os.path.join(TOOL_DIR, "bootloader_gen")
+BOOTLOADER_DIR = os.path.join(REPO_ROOT, "bootloader")
+SECRETS_FILE=os.path.join(TOOL_DIR, "secret_build_output.txt")
+
+def generate_keys():
+    print("making funny keys")
+    vault_key = os.urandom(KEY_SIZE)
+    decrypt_key=os.urandom(KEY_SIZE)
+    hmac_key=os.urandom(KEY_SIZE)
+    with open(SECRETS_FILE, 'w') as f:
+        f.write(vault_key.hex() + '\n')
+        f.write(decrypt_key.hex()+ '\n')
+        f.write(hmac_key.hex() + '\n')
 
 def make_bootloader() -> bool:
     # Build the bootloader from source.
 
     os.chdir(BOOTLOADER_DIR)
 
-    subprocess.call("make clean", shell=True)
+    #subprocess.call("make clean", shell=True)
     status = subprocess.call("make")
+
+    os.chdir(GEN_DIR)
+
+    if status == 0:
+        generate_keys()
+        subprocess.call("make clean", shell=True)
+        status = subprocess.call("make", shell=True)
 
     # Return True if make returned 0, otherwise return False.
     return status == 0

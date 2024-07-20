@@ -1,0 +1,10 @@
+#ifndef __BOATLOADER_SECRET_PARTION_H__
+#define __BOATLOADER_SECRET_PARTION_H__
+
+#define SECRETS_BLOCK 55
+#define SECRETS_MAGIC_INDICATOR 0x00002137
+#define SECRETS_EEPROM_OFFSET 0x400
+
+void setup_secrets(void);
+
+#endif
