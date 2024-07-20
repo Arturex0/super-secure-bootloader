@@ -5,7 +5,7 @@ Firmware Bundle-and-Protect Tool
 
 """
 import argparse
-#from pwn import *
+from pwn import *
 import struct
 
 
@@ -18,8 +18,8 @@ def protect_firmware(infile, outfile, version, message):
     firmware_and_message = firmware + message.encode() + b"\00"
 
     # Pack version and size into two little-endian shorts
-    #metadata = p16(version, endian='little') + p16(len(firmware), endian='little')  
-    metadata = struct.pack('<I', version) + struct.pack('<I', len(firmware))
+    metadata = p16(version, endian='little') + p16(len(firmware), endian='little')  
+    #metadata = struct.pack('<I', version) + struct.pack('<I', len(firmware))
 
     # Append firmware and message to metadata
     firmware_blob = metadata + firmware_and_message
