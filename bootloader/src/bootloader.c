@@ -2,6 +2,8 @@
 // Approved for public release. Distribution unlimited 23-02181-25.
 
 #include "bootloader.h"
+#include "secret_partition.h"
+#include "secrets.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -13,6 +15,8 @@
 #include "driverlib/flash.h"     // FLASH API
 #include "driverlib/interrupt.h" // Interrupt API
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
+
+#include "driverlib/eeprom.h"	 // EEPROM API
 
 // Application Imports
 #include "driverlib/gpio.h"
@@ -33,6 +37,7 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define METADATA_BASE 0xFC00 // base address of version and firmware size in Flash
 #define FW_BASE 0x10000      // base address of firmware in Flash
 
+
 // FLASH Constants
 #define FLASH_PAGESIZE 1024
 #define FLASH_WRITESIZE 4
@@ -42,6 +47,8 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define ERROR ((unsigned char)0x01)
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
+
+// Define secrets block (56th block)
 
 // Device metadata
 uint16_t * fw_version_address = (uint16_t *)METADATA_BASE;
@@ -78,6 +85,7 @@ void debug_delay_led() {
 
 
 int main(void) {
+	uint32_t eeprom_status;
 
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
@@ -93,6 +101,53 @@ int main(void) {
     // debug_delay_led();
 
     initialize_uarts(UART0);
+
+
+	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
+	while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0)) {
+	}
+
+	//make sure EEPROM is working
+	eeprom_status = EEPROMInit();
+	if (eeprom_status == EEPROM_INIT_ERROR) {
+		uart_write_str(UART0, "Fatal EEPROM error\n");
+		SysCtlReset();
+	}
+
+	// Check for magic number
+	uint32_t magic = *(uint32_t *)(SECRETS_BLOCK << 10);
+	if (magic == SECRETS_MAGIC_INDICATOR) {
+		uart_write_str(UART0, "Secrets have been detected, resetting! Received: ");
+
+		uint32_t v = *(uint32_t *) ((SECRETS_BLOCK << 10) + 4);
+		uart_write_hex(UART0, v);
+		uart_write_str(UART0, ", writing data to EEPROM\n");
+
+		uint32_t result = 0;
+		//reset EEPROM
+		result = EEPROMMassErase();
+		if (result != 0) {
+			uart_write_str(UART0, "Failed to erase EEPROM, retrying\n");
+			SysCtlReset();
+		}
+
+		//clear flash before writing to EEPROM to ensure only one location contains secrets
+		result = FlashErase((SECRETS_BLOCK << 10));
+		if (result != 0) {
+			uart_write_str(UART0, "Failed to erase flash\n");
+			SysCtlReset();
+		}
+
+		EEPROMProgram(&v, SECRETS_EEPROM_OFFSET, sizeof(v));
+		//counter to test write
+
+	}
+	uart_write_str(UART0, "No secrets in secret block!, secret stored in EEPROM was: ");
+	uint32_t v;
+	EEPROMRead(&v, SECRETS_EEPROM_OFFSET, sizeof(v));
+	uart_write_hex(UART0, v);
+	uart_write_str(UART0, ", continue booting\n");
+	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
     uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");
