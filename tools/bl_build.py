@@ -14,6 +14,8 @@ import pathlib
 import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.absolute()
+TOOL_DIR = pathlib.Path(__file__).parent.absolute()
+GEN_DIR = os.path.join(TOOL_DIR, "bootloader_gen")
 BOOTLOADER_DIR = os.path.join(REPO_ROOT, "bootloader")
 
 
@@ -22,8 +24,14 @@ def make_bootloader() -> bool:
 
     os.chdir(BOOTLOADER_DIR)
 
-    subprocess.call("make clean", shell=True)
+    #subprocess.call("make clean", shell=True)
     status = subprocess.call("make")
+
+    os.chdir(GEN_DIR)
+
+    if status == 0:
+        subprocess.call("make clean", shell=True)
+        status = subprocess.call("make", shell=True)
 
     # Return True if make returned 0, otherwise return False.
     return status == 0
