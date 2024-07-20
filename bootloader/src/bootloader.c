@@ -117,19 +117,24 @@ int main(void) {
 	// Check for magic number
 	uint32_t magic = *(uint32_t *)(SECRETS_BLOCK << 10);
 	if (magic == SECRETS_MAGIC_INDICATOR) {
-		uart_write_str(UART0, "Secrets have been detected, resetting! Received: ");
+		uart_write_str(UART0, "Secrets have been detected, restarting!\n");
 
-		uint32_t v = *(uint32_t *) ((SECRETS_BLOCK << 10) + 4);
-		uart_write_hex(UART0, v);
-		uart_write_str(UART0, ", writing data to EEPROM\n");
+		// compute address where keys are stored (should just be right after magic)
+		secrets_struct *secrets_location = (secrets_struct *) ((SECRETS_BLOCK << 10) + 4);
+		secrets_struct secrets;
 
+
+		//results of api calls for error checking
 		uint32_t result = 0;
-		//reset EEPROM
+
+		//Erase EEPROM so we can write our keys
 		result = EEPROMMassErase();
 		if (result != 0) {
-			uart_write_str(UART0, "Failed to erase EEPROM, retrying\n");
+			uart_write_str(UART0, "Failed to erase EEPROM, restarting\n");
 			SysCtlReset();
 		}
+		//backup secrets into memory before clearing flash
+		secrets = *secrets_location;
 
 		//clear flash before writing to EEPROM to ensure only one location contains secrets
 		result = FlashErase((SECRETS_BLOCK << 10));
@@ -138,15 +143,21 @@ int main(void) {
 			SysCtlReset();
 		}
 
-		EEPROMProgram(&v, SECRETS_EEPROM_OFFSET, sizeof(v));
+		
+		//store secrets into EEPROM
+		result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
+		if (result != 0) {
+			uart_write_str(UART0, "Failed to write EEPROM, retrying\n");
+			result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
+		}
+		
+		SysCtlReset();
 		//counter to test write
 
 	}
-	uart_write_str(UART0, "No secrets in secret block!, secret stored in EEPROM was: ");
-	uint32_t v;
-	EEPROMRead(&v, SECRETS_EEPROM_OFFSET, sizeof(v));
-	uart_write_hex(UART0, v);
-	uart_write_str(UART0, ", continue booting\n");
+	//uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
+	secrets_struct secrets;
+	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
