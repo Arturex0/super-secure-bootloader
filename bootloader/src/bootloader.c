@@ -24,16 +24,12 @@
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/sha.h"
 #include "wolfssl/wolfcrypt/rsa.h"
+#include "wolfssl/wolfcrypt/hmac.h"
 
 // Forward Declarations
 void load_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
-
-// Firmware Constants
-#define METADATA_BASE 0xFC00 // base address of version and firmware size in Flash
-#define FW_BASE 0x10000      // base address of firmware in Flash
-
 
 // FLASH Constants
 #define FLASH_PAGESIZE 1024
@@ -45,15 +41,9 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
 
-// Define secrets block (56th block)
-
-// Device metadata
-uint16_t * fw_version_address = (uint16_t *)METADATA_BASE;
-uint16_t * fw_size_address = (uint16_t *)(METADATA_BASE + 2);
-uint8_t * fw_release_message_address;
-
-// Firmware Buffer
-unsigned char data[FLASH_PAGESIZE];
+// Very important program memory
+uint8_t program_data[32];
+uint8_t bad;
 
 // Delay to allow time to connect GDB
 // green LED as visual indicator of when this function is running
@@ -83,6 +73,8 @@ void debug_delay_led() {
 
 int main(void) {
 	uint32_t eeprom_status;
+	bad = 5;
+	program_data[0] = 5;
 
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
@@ -115,8 +107,20 @@ int main(void) {
 	setup_secrets();
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
+
+	// Funny crypto shenanigans
+	Hmac hmac;
+	Aes aes;
+	uint8_t iv[16];
 	secrets_struct secrets;
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
+
+	
+	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
+		uart_write_str(UART0, "FATAL hmac key error\n");
+		SysCtlReset();
+	}
+	
 	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
@@ -149,7 +153,6 @@ void load_firmware(void) {
     uint32_t rcv = 0;
 
     uint32_t data_index = 0;
-    uint32_t page_addr = FW_BASE;
     uint32_t version = 0;
     uint32_t size = 0;
 
@@ -167,64 +170,6 @@ void load_firmware(void) {
 
     // Compare to old version and abort if older (note special case for version 0).
     // If no metadata available (0xFFFF), accept version 1
-    uint16_t old_version = *fw_version_address;
-    if (old_version == 0xFFFF) {
-        old_version = 1;
-    }
-
-    if (version != 0 && version < old_version) {
-        uart_write(UART0, ERROR); // Reject the metadata.
-        SysCtlReset();            // Reset device
-        return;
-    } else if (version == 0) {
-        // If debug firmware, don't change version
-        version = old_version;
-    }
-
-    // Write new firmware size and version to Flash
-    // Create 32 bit word for flash programming, version is at lower address, size is at higher address
-    uint32_t metadata = ((size & 0xFFFF) << 16) | (version & 0xFFFF);
-    program_flash((uint8_t *) METADATA_BASE, (uint8_t *)(&metadata), 4);
-
-    uart_write(UART0, OK); // Acknowledge the metadata.
-
-    /* Loop here until you can get all your characters and stuff */
-    while (1) {
-
-        // Get two bytes for the length.
-        rcv = uart_read(UART0, BLOCKING, &read);
-        frame_length = (int)rcv << 8;
-        rcv = uart_read(UART0, BLOCKING, &read);
-        frame_length += (int)rcv;
-
-        // Get the number of bytes specified
-        for (int i = 0; i < frame_length; ++i) {
-            data[data_index] = uart_read(UART0, BLOCKING, &read);
-            data_index += 1;
-        } // for
-
-        // If we filed our page buffer, program it
-        if (data_index == FLASH_PAGESIZE || frame_length == 0) {
-            // Try to write flash and check for error
-            if (program_flash((uint8_t *) page_addr, data, data_index)) {
-                uart_write(UART0, ERROR); // Reject the firmware
-                SysCtlReset();            // Reset device
-                return;
-            }
-
-            // Update to next page
-            page_addr += FLASH_PAGESIZE;
-            data_index = 0;
-
-            // If at end of firmware, go to main
-            if (frame_length == 0) {
-                uart_write(UART0, OK);
-                break;
-            }
-        } // if
-
-        uart_write(UART0, OK); // Acknowledge the frame.
-    } // while(1)
 }
 
 /*
@@ -273,27 +218,11 @@ long program_flash(void* page_addr, unsigned char * data, unsigned int data_len)
     }
 }
 
+// Implement this in the future
 void boot_firmware(void) {
-    // Check if firmware loaded
-    int fw_present = 0;
-    for (uint8_t* i = (uint8_t*) FW_BASE; i < (uint8_t*) FW_BASE + 20; i++) {
-        if (*i != 0xFF) {
-            fw_present = 1;
-        }
-    }
-
-    if (!fw_present) {
-        uart_write_str(UART0, "No firmware loaded.\n");
-        SysCtlReset();            // Reset device
-        return;
-    }
-
-    // compute the release message address, and then print it
-    uint16_t fw_size = *fw_size_address;
-    fw_release_message_address = (uint8_t *)(FW_BASE + fw_size);
-    uart_write_str(UART0, (char *)fw_release_message_address);
-
-    // Boot the firmware
+	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
+	while (1) {
+	}
     __asm("LDR R0,=0x10001\n\t"
           "BX R0\n\t");
 }
