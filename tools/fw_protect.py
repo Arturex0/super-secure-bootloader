@@ -5,24 +5,49 @@ Firmware Bundle-and-Protect Tool
 
 """
 import argparse
+import os
 from pwn import *
+from Crypto.Hash import HMAC, SHA256
 import struct
 
+DEFAULT_SECRETS="./secret_build_output.txt"
 
-def protect_firmware(infile, outfile, version, message):
+
+def protect_firmware(infile, outfile, version, message, secrets):
     # Load firmware binary from infile
+    if secrets is None:
+        secrets = DEFAULT_SECRETS
     with open(infile, "rb") as fp:
         firmware = fp.read()
 
+    with open(secrets, 'r') as f:
+        vault_key = bytes.fromhex(f.readline())
+        decrypt_key = bytes.fromhex(f.readline())
+        hmac_key = bytes.fromhex(f.readline())
+
+    hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
+
     # Append null-terminated message to end of firmware
-    firmware_and_message = firmware + message.encode() + b"\00"
+    m = message.encode()
+    m_pad = m + b'0' * (1024 - len(m))
 
-    # Pack version and size into two little-endian shorts
-    metadata = p16(version, endian='little') + p16(len(firmware), endian='little')  
-    #metadata = struct.pack('<I', version) + struct.pack('<I', len(firmware))
+    # Shorts required but pack into ints instead
+    metadata = p32(version, endian='little') + p32(len(firmware), endian='little') + \
+               p32(len(m), endian='little') + p32(0, endian='little')
+    print(metadata)
 
-    # Append firmware and message to metadata
-    firmware_blob = metadata + firmware_and_message
+    hmac_obj.update(metadata)
+    metadata_hmac = hmac_obj.digest()
+
+    hmac_obj.update(metadata_hmac + m_pad + firmware)
+
+    signature = hmac_obj.digest()
+    iv = os.urandom(16)
+
+
+    #signature gets sent in at the end in seperate block
+    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + firmware
+
 
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:
@@ -35,6 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("--outfile", help="Filename for the output firmware.", required=True)
     parser.add_argument("--version", help="Version number of this firmware.", required=True)
     parser.add_argument("--message", help="Release message for this firmware.", required=True)
+    parser.add_argument("--secrets", help="File containing secrets", required=False)
     args = parser.parse_args()
 
-    protect_firmware(infile=args.infile, outfile=args.outfile, version=int(args.version), message=args.message)
+    protect_firmware(infile=args.infile, outfile=args.outfile, version=int(args.version), message=args.message, secrets=args.secrets)
