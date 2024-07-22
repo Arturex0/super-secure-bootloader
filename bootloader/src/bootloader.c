@@ -225,32 +225,30 @@ void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
 
 
 // verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
-bool verify_hmac(data, key, test_hash){
+bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash){
     Hmac hmac;
 
-    if (wc_HmacSetKey(&hmac, WC_SHA256, key, sizeof(key)) != 0) {
+    if (wc_HmacSetKey(&hmac, WC_SHA256, key, SECRETS_HMAC_KEY_LEN) != 0) {
         uart_write_str(UART0, "Couldn't init HMAC");
         SysCtlReset();
 }
 
-    if( wc_HmacUpdate(&hmac, data, sizeof(data)) != 0) {
+    if( wc_HmacUpdate(&hmac, data, data_len) != 0) {
     uart_write_str(UART0, "Couldn't init HMAC");
     SysCtlReset();
 }
 
-    char hash[32]; // 256/8 = 32
+    uint8_t hash[SECRETS_HASH_LENGTH]; // 256/8 = 32
     if (wc_HmacFinal(&hmac, hash) != 0) {
         uart_write_str(UART0, "Couldn't compute hash");
         SysCtlReset();
-}
-
-    if (strncmp(hash, test_hash, strnlen(hash)) == 0){
-        // uart_write_str(UART0, "hmac verification confirmed\n");
-    }
-    else{
-        uart_write_str(UART0, "FATAL hmac key error\n");
-		SysCtlReset();
-    }
-
+	}
+	bool ret = true;
+	for (uint32_t i = 0; i < SECRETS_HASH_LENGTH; i++) {
+		if (test_hash[i] != hash[i]) {
+			ret = false;
+		}
+	}
+	return ret;
 }
 
