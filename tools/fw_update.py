@@ -36,7 +36,7 @@ FRAME_SIZE = 1024
 
 
 def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
-    # blob =  iv 1 | metadata version 4 | fw length 4 | len message 4 | pad 4 | hmac 1
+    # blob =  iv 16 | metadata version 4 | fw length 4 | len message 4 | pad 4 | meta data hmac 32
     assert(len(metadata) == 16)
 
     version = u16(metadata[:4], endian='little')
@@ -56,7 +56,7 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     
 
     # Bootloader is now ready to accept metadata
-    size = p16(18, endian="little") # 1+4+4+4+4+1 = 18
+    size = p16(64, endian="little") 
     ser.write(size + IV + metadata + metadata_hmac)
 
     
@@ -92,12 +92,13 @@ def update(ser, infile, debug):
         firmware_blob = fp.read()
 
 
-    # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac 8  m_pad  firmware (numbers in bits)
+    # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac 32  m_pad  firmware (numbers in bytes)
+    #
     # Extracts each portion of the firmware blob
-    signature = firmware_blob[0:4]
-    iv = p8(firmware_blob[4:6], endian="little")     # packing short in to one byte
-    metadata = firmware_blob[6:8]
-    metadata_hmac = firmware_blob[8:9]
+    signature = firmware_blob[0:32]
+    iv = p8(firmware_blob[32:48], endian="little")  
+    metadata = firmware_blob[48:64]
+    metadata_hmac = firmware_blob[64:96]
 
     fw_size = u32(metadata[4:8], endian="little")
     firmware = firmware_blob[fw_size:]
