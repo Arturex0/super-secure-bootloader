@@ -41,40 +41,15 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
 
-// Very important program memory
-uint8_t program_data[32];
-uint8_t bad;
-
-// Delay to allow time to connect GDB
-// green LED as visual indicator of when this function is running
-void debug_delay_led() {
-
-    // Enable the GPIO port that is used for the on-board LED.
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-
-    // Check if the peripheral access is enabled.
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {
-    }
-
-    // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
-    // enable the GPIO pin for digital function.
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-
-    // Turn on the green LED
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-
-    // Wait
-    SysCtlDelay(SysCtlClockGet() * 2);
-
-    // Turn off the green LED
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0);
-}
-
+//crypto state
+Hmac hmac;
+Aes aes;
+uint8_t iv[16];
+uint8_t ct_buffer[FLASH_PAGESIZE];
+uint8_t pt_buffer[FLASH_PAGESIZE];
 
 int main(void) {
 	uint32_t eeprom_status;
-	bad = 5;
-	program_data[0] = 5;
 
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
@@ -86,8 +61,6 @@ int main(void) {
     // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
     // enable the GPIO pin for digital function.
     GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-
-    // debug_delay_led();
 
     initialize_uarts(UART0);
 
@@ -107,21 +80,19 @@ int main(void) {
 	setup_secrets();
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
+	/*
+	 * ========================================= Setup Finished ==============================
+	 */
 
 	// Funny crypto shenanigans
-	Hmac hmac;
-	Aes aes;
-	uint8_t iv[16];
+
 	secrets_struct secrets;
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
-
 	
 	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
 		uart_write_str(UART0, "FATAL hmac key error\n");
 		SysCtlReset();
 	}
-	
-	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
     uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");
