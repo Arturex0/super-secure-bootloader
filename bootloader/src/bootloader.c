@@ -111,6 +111,7 @@ int main(void) {
 			uint32_t size;
 			bool passed;
             uart_write_str(UART0, "U");
+
 			size = read_frame(ct_buffer);
 			metadata_blob *m = (metadata_blob *) &ct_buffer;
 
@@ -140,9 +141,6 @@ int main(void) {
     }
 }
 
-// Reads in at most BUFFER_SIZE bytes into buffer 
-// This function does not perform error checking if block size is zero
-
  /*
  * Load the firmware into flash.
  */
@@ -171,15 +169,6 @@ void load_firmware(void) {
     // If no metadata available (0xFFFF), accept version 1
 }
 
-/*
- * Program a stream of bytes to the flash.
- * This function takes the starting address of a 1KB page, a pointer to the
- * data to write, and the number of bytes to write.
- *
- * This functions performs an erase of the specified flash page before writing
- * the data.
- */
-
 // Implement this in the future
 void boot_firmware(void) {
 	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
@@ -188,32 +177,6 @@ void boot_firmware(void) {
     __asm("LDR R0,=0x10001\n\t"
           "BX R0\n\t");
 }
-
-void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
-    for (uint8_t * cursor = start; cursor < (start + len); cursor += 1) {
-        uint8_t data = *((uint8_t *)cursor);
-        uint8_t right_nibble = data & 0xF;
-        uint8_t left_nibble = (data >> 4) & 0xF;
-        char byte_str[3];
-        if (right_nibble > 9) {
-            right_nibble += 0x37;
-        } else {
-            right_nibble += 0x30;
-        }
-        byte_str[1] = right_nibble;
-        if (left_nibble > 9) {
-            left_nibble += 0x37;
-        } else {
-            left_nibble += 0x30;
-        }
-        byte_str[0] = left_nibble;
-        byte_str[2] = '\0';
-
-        uart_write_str(uart, byte_str);
-        uart_write_str(uart, " ");
-    }
-}
-
 
 // verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash){
