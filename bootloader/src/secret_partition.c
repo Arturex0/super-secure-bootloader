@@ -1,6 +1,7 @@
 #include "bootloader.h"
 #include "secret_partition.h"
 #include "secrets.h"
+#include "storage.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -13,7 +14,8 @@
 
 #include "driverlib/eeprom.h"	 // EEPROM API
 
-// Checks for secrets and moves them to EEPROM if they exist, otherwise does nothing
+// Checks for secrets and moves them to EEPROM if they exist, 
+// If secrets are moved this will also reset the vault
 // Before using this function, ensure:
 // EEPROM is enabled (SysCtlPeripheralEnable())
 // EEPROMInit() is called, *must* be done after SysCtlPeripheralEnable()
@@ -21,6 +23,13 @@ void setup_secrets(void) {
 	uint32_t magic = *(uint32_t *)(SECRETS_BLOCK << 10);
 	if (magic == SECRETS_MAGIC_INDICATOR) {
 
+		// ========== Reset the vault ==========
+		uint32_t vault_magic = *((uint32_t *) (VAULT_BLOCK << 10));
+		if (vault_magic == VAULT_MAGIC) {
+			// magic detected, erase area and initialize vault
+		}
+
+		// ========== Store secrets into EEPROM ==========
 		// compute address where keys are stored (should just be right after magic)
 		secrets_struct *secrets_location = (secrets_struct *) ((SECRETS_BLOCK << 10) + 4);
 		secrets_struct secrets;
