@@ -31,19 +31,19 @@ from util import *
 
 ser = serial.Serial("/dev/ttyACM0", 115200)
 
-RESP_OK = b"\x00"
-FRAME_SIZE = 256
+RESP_OK = b"A"
+FRAME_SIZE = 1024
 
 
-def send_metadata(ser, metadata, debug=False):
-    # metadata version 4 | fw length 4 | len message 4 | pad 4
+def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
+    # blob =  iv 1 | metadata version 4 | fw length 4 | len message 4 | pad 4 | hmac 1
     assert(len(metadata) == 16)
 
     version = u16(metadata[:4], endian='little')
     fw_size = u16(metadata[4:8], endian='little')
     message_len = u16(metadata[8:12], endian='little')
 
-
+    # Might want to remove after debugging
     print(f"Version: {version}\nFirmware is: {fw_size} bytes\n message is {message_len} bytes \n")
 
     # Handshake for update
@@ -53,17 +53,20 @@ def send_metadata(ser, metadata, debug=False):
     while ser.read(1).decode() != "U":
         print("got a byte")
         pass
+    
 
-    # Send size and version to bootloader.
-    if debug:
-        print(metadata)
+    # Bootloader is now ready to accept metadata
+    size = p16(18, endian="little") # 1+4+4+4+4+1 = 18
+    ser.write(size + IV + metadata + metadata_hmac)
 
-    ser.write(metadata)
+    
 
     # Wait for an OK from the bootloader.
-    resp = ser.read(1)
-    if resp != RESP_OK:
-        raise RuntimeError("ERROR: Bootloader responded with {}".format(repr(resp)))
+    while ser.read(1).decode() != RESP_OK:  # charcter A
+        print("Wating for confirmation...")
+
+    # if resp != RESP_OK:  
+    #     raise RuntimeError("ERROR: Bootloader responded with {}".format(repr(resp)))
 
 
 def send_frame(ser, frame, debug=False):
@@ -89,22 +92,27 @@ def update(ser, infile, debug):
         firmware_blob = fp.read()
 
 
-    # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac  m_pad  firmware
+    # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac 8  m_pad  firmware (numbers in bits)
     # Extracts each portion of the firmware blob
-    signature = firmware_blob[0, 32]
-    iv = firmware_blob[32, 48]
-    metadata = firmware_blob[48, 64]
+    signature = firmware_blob[0:4]
+    iv = p8(firmware_blob[4:6], endian="little")     # packing short in to one byte
+    metadata = firmware_blob[6:8]
+    metadata_hmac = firmware_blob[8:9]
 
     fw_size = u32(metadata[4:8], endian="little")
     firmware = firmware_blob[fw_size:]
 
-    send_metadata(ser, metadata, debug=debug)
+    send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)
+    
+    # If you reach here you should have sucsessfully sent metadata and can start to send firmware frames
+
 
     for idx, frame_start in enumerate(range(0, len(firmware), FRAME_SIZE)):
         data = firmware[frame_start : frame_start + FRAME_SIZE]
 
         # Construct frame.
-        frame = p16(len(data), endian='big') + data
+        frame_size = p16(len(data), endian='little')
+        frame =  frame_size + data
 
         send_frame(ser, frame, debug=debug)
         print(f"Wrote frame {idx} ({len(frame)} bytes)")
@@ -112,7 +120,7 @@ def update(ser, infile, debug):
     print("Done writing firmware.")
 
     # Send a zero length payload to tell the bootlader to finish writing it's page.
-    ser.write(p16(0x0000, endian='big'))
+    ser.write(p16(0x0000, endian='little'))
     resp = ser.read(1)  # Wait for an OK from the bootloader
     if resp != RESP_OK:
         raise RuntimeError("ERROR: Bootloader responded to zero length frame with {}".format(repr(resp)))
