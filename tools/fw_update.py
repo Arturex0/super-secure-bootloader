@@ -32,38 +32,60 @@ from util import *
 ser = serial.Serial("/dev/ttyACM0", 115200)
 
 RESP_OK = b"A"
+RESP_UPDATE = b"U"
+SEND_UPDATE = b"U"
+SEND_FRAME = b"F"
+
 FRAME_SIZE = 1024
+DEBUG = True
 
 
 def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     # blob =  iv 16 | metadata version 4 | fw length 4 | len message 4 | pad 4 | meta data hmac 32
     assert(len(metadata) == 16)
 
-    version = u16(metadata[:4], endian='little')
-    fw_size = u16(metadata[4:8], endian='little')
-    message_len = u16(metadata[8:12], endian='little')
+    version = u32(metadata[:4], endian='little')
+    fw_size = u32(metadata[4:8], endian='little')
+    message_len = u32(metadata[8:12], endian='little')
 
     # Might want to remove after debugging
     print(f"Version: {version}\nFirmware is: {fw_size} bytes\n message is {message_len} bytes \n")
 
     # Handshake for update
-    ser.write(b"U")
+    ser.write(SEND_UPDATE)
 
+    b = ser.read(1)
+    if DEBUG:
+        print(b)
     print("Waiting for bootloader to enter update mode...")
-    while ser.read(1).decode() != "U":
+    while b != RESP_UPDATE:
         print("got a byte")
+        b = ser.read(1)
+        if DEBUG:
+            print(b)
         pass
     
 
-    # Bootloader is now ready to accept metadata
+    if DEBUG:
+        print("Writing metadata")
+
+    # Bootloader is now ready to accept metadata, send handshake
+    ser.write(SEND_FRAME)
+
     size = p16(64, endian="little") 
     ser.write(size + IV + metadata + metadata_hmac)
 
-    
-
     # Wait for an OK from the bootloader.
-    while ser.read(1).decode() != RESP_OK:  # charcter A
+    b = ser.read(1)
+    if DEBUG:
+        print(b)
+    while b != RESP_OK:  # charcter A
         print("Wating for confirmation...")
+        b = ser.read(1)
+        if DEBUG:
+            print(b)
+    if DEBUG:
+        print("Received confirmation :D")
 
     # if resp != RESP_OK:  
     #     raise RuntimeError("ERROR: Bootloader responded with {}".format(repr(resp)))
@@ -96,7 +118,7 @@ def update(ser, infile, debug):
     #
     # Extracts each portion of the firmware blob
     signature = firmware_blob[0:32]
-    iv = p8(firmware_blob[32:48], endian="little")  
+    iv = firmware_blob[32:48]  
     metadata = firmware_blob[48:64]
     metadata_hmac = firmware_blob[64:96]
 
