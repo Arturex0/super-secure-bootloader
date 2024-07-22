@@ -1,6 +1,7 @@
 #include "bootloader.h"
 #include "secret_partition.h"
 #include "secrets.h"
+#include "metadata.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -30,6 +31,12 @@
 void load_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
+bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
+
+#define BUFFER_SIZE 1024
+// Reads into buffer and performs error checking, please ensure that buffer has minimum length of BUFFER_SIZE
+uint32_t read_frame(uint8_t *buffer);
+uint16_t read_short(void);
 
 // FLASH Constants
 #define FLASH_PAGESIZE 1024
@@ -40,13 +47,15 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 #define ERROR ((unsigned char)0x01)
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
+#define FRAME ((unsigned char)'F')
 
 //crypto state
 Hmac hmac;
 Aes aes;
-uint8_t iv[16];
+uint8_t iv[SECRETS_IV_LEN];
 uint8_t ct_buffer[FLASH_PAGESIZE];
 uint8_t pt_buffer[FLASH_PAGESIZE];
+metadata global_metadata;
 
 int main(void) {
 	uint32_t eeprom_status;
@@ -102,10 +111,32 @@ int main(void) {
         uint32_t instruction = uart_read(UART0, BLOCKING, &resp);
 
         if (instruction == UPDATE) {
+
+			// ========== Funny metadata shenanigans =========
+			//Read a frame and ensure it matches the size of metadata
+			uint32_t size;
+			bool passed;
             uart_write_str(UART0, "U");
-            load_firmware();
-            uart_write_str(UART0, "Loaded new firmware.\n");
-            nl(UART0);
+			size = read_frame(ct_buffer);
+			metadata_blob *m = (metadata_blob *) &ct_buffer;
+
+			if (size != sizeof(metadata_blob)) {
+				uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
+				SysCtlReset();
+			}
+			//save a bunch of stuff
+			memcpy(iv, &m->iv, sizeof(m->iv));
+			memcpy(&global_metadata, &m->metadata, sizeof(m->metadata));
+			passed = verify_hmac((uint8_t *) &global_metadata, sizeof(metadata), secrets.hmac_key, (uint8_t *) &m->hmac);
+			if (!passed) {
+				uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
+				SysCtlReset();
+			}
+
+			uart_write_str(UART0, "TODO: finish firmware loading :sob:\n");
+            //load_firmware();
+            //uart_write_str(UART0, "Loaded new firmware.\n");
+            //nl(UART0);
         } else if (instruction == BOOT) {
             uart_write_str(UART0, "B");
             uart_write_str(UART0, "Booting firmware...\n");
@@ -114,6 +145,50 @@ int main(void) {
     }
 }
 
+// Reads in at most BUFFER_SIZE bytes into buffer 
+// This function does not perform error checking if block size is zero
+uint32_t read_frame(uint8_t * buffer) {
+	//TODO: Comute checksum and verify (Wait for acknowledge)
+	
+	int read = 0;
+	
+	//wait for a frame instruction
+    uint32_t instruction = uart_read(UART0, BLOCKING, &read);
+	while (instruction != FRAME) {
+		instruction = uart_read(UART0, BLOCKING, &read);
+	}
+
+	uint16_t data_size;
+	data_size = read_short();
+	if (data_size == 0) {
+		return data_size;
+	}
+	if (data_size > BUFFER_SIZE) {
+		uart_write_str(UART0, "Frame size too big!\n");
+		SysCtlReset();
+	}
+	for (int i = 0; i < data_size; i++) {
+		buffer[i] = uart_read(UART0, BLOCKING, &read);
+	}
+
+	uart_write_str(UART0, "A");
+	return data_size;
+
+	//resend, checksum failed
+	//uart_write_str(UART0, "R");
+}
+
+//read a little endian short from serial
+uint16_t read_short(void) {
+	int read = 0;
+	uint16_t r = 0;
+	uint8_t c;
+	c = uart_read(UART0, BLOCKING, &read);
+	r = c;
+	c = uart_read(UART0, BLOCKING, &read);
+	r |= (c << 8);
+	return r;
+}
 
  /*
  * Load the firmware into flash.
