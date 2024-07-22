@@ -251,3 +251,35 @@ void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
         uart_write_str(uart, " ");
     }
 }
+
+
+// verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
+bool verify_hmac(data, key, test_hash){
+    Hmac hmac;
+
+    if (wc_HmacSetKey(&hmac, WC_SHA256, key, sizeof(key)) != 0) {
+        uart_write_str(UART0, "Couldn't init HMAC");
+        SysCtlReset();
+}
+
+    if( wc_HmacUpdate(&hmac, data, sizeof(data)) != 0) {
+    uart_write_str(UART0, "Couldn't init HMAC");
+    SysCtlReset();
+}
+
+    char hash[32]; // 256/8 = 32
+    if (wc_HmacFinal(&hmac, hash) != 0) {
+        uart_write_str(UART0, "Couldn't compute hash");
+        SysCtlReset();
+}
+
+    if (strncmp(hash, test_hash, strnlen(hash)) == 0){
+        // uart_write_str(UART0, "hmac verification confirmed\n");
+    }
+    else{
+        uart_write_str(UART0, "FATAL hmac key error\n");
+		SysCtlReset();
+    }
+
+}
+
