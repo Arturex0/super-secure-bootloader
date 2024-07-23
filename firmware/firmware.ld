@@ -39,13 +39,16 @@
 
 MEMORY
 {
+	/*
     FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x00080000
+	*/
+	FLASH (rx) : ORIGIN = 0xe800, LENGTH = 0x18400
     SRAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00018000
 }
 
 SECTIONS
 {
-    .text 0x10000 :
+    .text 0xe800 :
     {
         _text = .;
         KEEP(*(.isr_vector))
