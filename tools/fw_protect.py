@@ -20,6 +20,7 @@ def protect_firmware(infile, outfile, version, message, secrets):
         secrets = DEFAULT_SECRETS
     with open(infile, "rb") as fp:
         firmware = fp.read()
+    firmware_padded = pad(firmware, 16)
 
     with open(secrets, 'r') as f:
         vault_key = bytes.fromhex(f.readline())
@@ -33,6 +34,7 @@ def protect_firmware(infile, outfile, version, message, secrets):
     m_pad = m + b'\xff' * (1024 - len(m))
 
     # Shorts required but pack into ints instead
+    # don't use the padded firmware length use normal length
     metadata = p32(version, endian='little') + p32(len(firmware), endian='little') + \
                p32(len(m), endian='little') + p32(0, endian='little')
     print(metadata)
@@ -40,13 +42,13 @@ def protect_firmware(infile, outfile, version, message, secrets):
     hmac_obj.update(metadata)
     metadata_hmac = hmac_obj.digest()
 
-    hmac_obj.update(metadata_hmac + m_pad + firmware)
+    hmac_obj.update(metadata_hmac + m_pad + firmware_padded)
 
     signature = hmac_obj.digest()
     iv = os.urandom(16)
 
     #signature gets sent in at the end in seperate block
-    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + pad(firmware, 16)
+    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + firmware_padded
 
 
     # Write firmware blob to outfile

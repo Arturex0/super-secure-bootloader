@@ -96,11 +96,17 @@ def send_firmware(firmware, signature):
         ser.write(size + firmware[i * 1024: (i + 1) * 1024])
         wait_confirmation(RESP_OK)
     if extra:
+        print("Writing partial frame!")
         ser.write(SEND_FRAME)
         size = p16(extra)
         ser.write(size + firmware[full_blocks * 1024:])
         wait_confirmation(RESP_OK)
-    print("Twiddling thumbs")
+    
+
+    print("Sending in signature please pray for me")
+    ser.write(SEND_FRAME)
+    ser.write(p16(0) + signature)
+    wait_confirmation(RESP_OK)
 
 
 def send_frame(ser, frame, debug=False):
@@ -140,31 +146,8 @@ def update(ser, infile, debug):
 
     send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)
     send_firmware(firmware, signature)
-    
-    # If you reach here you should have sucsessfully sent metadata and can start to send firmware frames
 
-
-    for idx, frame_start in enumerate(range(0, len(firmware), FRAME_SIZE)):
-        data = firmware[frame_start : frame_start + FRAME_SIZE]
-
-        # Construct frame.
-        frame_size = p16(len(data), endian='little')
-        frame =  frame_size + data
-
-        send_frame(ser, frame, debug=debug)
-        print(f"Wrote frame {idx} ({len(frame)} bytes)")
-
-    print("Done writing firmware.")
-
-    # Send a zero length payload to tell the bootlader to finish writing it's page.
-    ser.write(p16(0x0000, endian='little'))
-    resp = ser.read(1)  # Wait for an OK from the bootloader
-    if resp != RESP_OK:
-        raise RuntimeError("ERROR: Bootloader responded to zero length frame with {}".format(repr(resp)))
-    print(f"Wrote zero length frame (2 bytes)")
-
-    return ser
-
+    print("Yay you did it :bangbang:")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Firmware Update Tool")
