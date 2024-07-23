@@ -39,17 +39,17 @@ void setup_vault(void);
 //secrets buffer
 #define BUFFER_SIZE 1024
 
-// Reads into buffer and performs error checking, please ensure that buffer has minimum length of BUFFER_SIZE
-uint32_t read_frame(uint8_t *buffer);
-uint16_t read_short(void);
-
 //crypto state
+
+// FLOW CHART: Initialize import state
 Hmac hmac;
 Aes aes;
-uint8_t iv[SECRETS_IV_LEN];
+vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
 uint8_t ct_buffer[FLASH_PAGESIZE];
 uint8_t pt_buffer[FLASH_PAGESIZE];
-metadata global_metadata;
+
+// FLOW CHART: Allocate space for IV + encrypted data + decrypted data
+uint8_t iv[SECRETS_IV_LEN];
 
 int main(void) {
 	uint32_t eeprom_status;
@@ -83,12 +83,8 @@ int main(void) {
 	setup_secrets();
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
-	/*
-	 * ========================================= Setup Finished ==============================
-	 */
 
 	// Funny crypto shenanigans
-
 	secrets_struct secrets;
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
@@ -109,27 +105,104 @@ int main(void) {
 			// ========== Funny metadata shenanigans =========
 			//Read a frame and ensure it matches the size of metadata
 			uint32_t size;
+			// version of current firmware
+			uint32_t old_version;
+			// current block to write into flash
+			uint32_t write_block;
+			// blocks that have been written to flash (make sure to always update this if you increment write_block)
+			uint32_t blocks_written = 0;
+			// pointers to newly received metadata block and old metadata blocks
+			metadata_blob *old_mb;
+			metadata_blob *new_mb;
+			// partition to change trust to
+			enum STORAGE_PART_STATUS new_permissions;
+
 			bool passed;
+
             uart_write_str(UART0, "U");
 
+			// FLOW CHART: Read in IV + metadata chunk into memory
 			size = read_frame(ct_buffer);
-			metadata_blob *m = (metadata_blob *) &ct_buffer;
-
+			new_mb = (metadata_blob *) &ct_buffer;
 			if (size != sizeof(metadata_blob)) {
 				uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
 				SysCtlReset();
 			}
-			//save a bunch of stuff
-			memcpy(iv, &m->iv, sizeof(m->iv));
-			memcpy(&global_metadata, &m->metadata, sizeof(m->metadata));
-			passed = verify_hmac((uint8_t *) &global_metadata, sizeof(metadata), secrets.hmac_key, (uint8_t *) &m->hmac);
+
+			// save iv in global (useful)
+			memcpy(&iv, &new_mb->iv, sizeof(new_mb->iv));
+
+			// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
+
+			wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
+			wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
+
+			passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
+			// FLOW CHART: metadata signature good?
 			if (!passed) {
 				uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
 				SysCtlReset();
 			}
+			uart_write_str(UART0, "you're did it\n");
+
+			switch (vault_addr->s) {
+				// Write to partition B, read old metadata from partition A
+				case STORAGE_TRUST_A:
+					write_block = STORAGE_PARTB;
+					new_permissions = STORAGE_TRUST_B;
+
+					old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) - sizeof(metadata_blob));
+					old_version = old_mb->metadata.fw_version;
+					break;
+				// Write to partition A, read old metadata from partition B
+				case STORAGE_TRUST_B:
+					write_block = STORAGE_PARTA;
+					new_permissions = STORAGE_TRUST_A;
+
+					old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) - sizeof(metadata_blob));
+					old_version = old_mb->metadata.fw_version;
+					break;
+				// By default write to A, firmware version is always 1	
+				case STORAGE_TRUST_NONE:
+					write_block = STORAGE_PARTA;
+					new_permissions = STORAGE_TRUST_A;
+					old_version = 1;
+			}
+			// Not needed afterwards so throw it away
+			old_mb = NULL;
+
+			// Handle debug case (if zero just set it to old version)
+			if (new_mb->metadata.fw_version == 0) {
+				new_mb->metadata.fw_version = old_version;
+			}
+
+			// FLOW CHART: Metadata version good?
+			if (new_mb->metadata.fw_version < old_version) {
+				uart_write_str(UART0, "wtf devolving\n");
+				SysCtlReset();
+			}
+
 			// Flash the funny metadata into memory
 
-			uart_write_str(UART0, "TODO: finish firmware loading :sob:\n");
+			// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
+			if (sizeof(metadata_blob) % 4) {
+				uart_write_str(UART0, "oops messed up struct alignment\n");
+				SysCtlReset();
+			}
+
+			if (blocks_written > STORAGE_PART_SIZE) {
+				uart_write_str(UART0, "no storage :<\n");
+				SysCtlReset();
+			}
+			FlashErase(write_block << 10);
+			FlashProgram((uint32_t *) new_mb, write_block + FLASH_PAGESIZE - sizeof(metadata_blob), sizeof(metadata_blob));
+			blocks_written++;
+			write_block++;
+
+			// Acknowledge this frame because it is legitimate, prepare for another frame
+			uart_write_str(UART0, "A");
+
+
             //load_firmware();
             //uart_write_str(UART0, "Loaded new firmware.\n");
             //nl(UART0);

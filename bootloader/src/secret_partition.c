@@ -2,6 +2,8 @@
 #include "secret_partition.h"
 #include "secrets.h"
 #include "storage.h"
+#include "butils.h"
+#include "uart/uart.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -19,15 +21,22 @@
 // Before using this function, ensure:
 // EEPROM is enabled (SysCtlPeripheralEnable())
 // EEPROMInit() is called, *must* be done after SysCtlPeripheralEnable()
-void setup_secrets(void) {
-	uint32_t magic = *(uint32_t *)(SECRETS_BLOCK << 10);
-	if (magic == SECRETS_MAGIC_INDICATOR) {
 
-		// ========== Reset the vault ==========
-		uint32_t vault_magic = *((uint32_t *) (VAULT_BLOCK << 10));
-		if (vault_magic == VAULT_MAGIC) {
-			// magic detected, erase area and initialize vault
-		}
+void setup_secrets(void) {
+	// ========== Reset vault if no magic ==========
+	uint32_t vault_magic = *((uint32_t *) (VAULT_BLOCK << 10));
+	if (vault_magic != VAULT_MAGIC) {
+		// magic not detected, erase area and initialize vault
+		vault_struct vs = {
+			VAULT_MAGIC,
+			STORAGE_TRUST_NONE
+		};
+		program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &vs, sizeof(vs));
+	}
+
+	uint32_t secret_magic = *(uint32_t *)(SECRETS_BLOCK << 10);
+	if (secret_magic == SECRETS_MAGIC_INDICATOR) {
+
 
 		// ========== Store secrets into EEPROM ==========
 		// compute address where keys are stored (should just be right after magic)

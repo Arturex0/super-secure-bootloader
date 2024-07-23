@@ -1,5 +1,10 @@
 #ifndef __BOOTLOADER_STORAGE_H__
 #define __BOOTLOADER_STORAGE_H__
+#include <stdint.h>
+/*
+ * Partition layout:
+ * | Iv Metadata | Message | ...Firmware... | Signature |
+ */
 //first partition
 #define STORAGE_PARTA 56
 //second partition
@@ -16,6 +21,7 @@ enum STORAGE_PART_STATUS {
 };
 
 typedef struct vault_struct {
+	uint32_t magic;
 	enum STORAGE_PART_STATUS s;
 } vault_struct;
 #endif
