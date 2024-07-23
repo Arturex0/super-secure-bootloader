@@ -39,6 +39,19 @@ SEND_FRAME = b"F"
 FRAME_SIZE = 1024
 DEBUG = True
 
+def wait_confirmation(response):
+    print("Waiting for bootloader response....")
+    b = ser.read(1)
+    if DEBUG:
+        print(b.decode(), end='')
+    while b != response:
+        b = ser.read(1)
+        if DEBUG:
+            print(b.decode(), end='')
+        pass
+    print()
+    print(">")
+
 
 def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     # blob =  iv 16 | metadata version 4 | fw length 4 | len message 4 | pad 4 | meta data hmac 32
@@ -53,17 +66,7 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
 
     # Handshake for update
     ser.write(SEND_UPDATE)
-
-    b = ser.read(1)
-    if DEBUG:
-        print(b)
-    print("Waiting for bootloader to enter update mode...")
-    while b != RESP_UPDATE:
-        print("got a byte")
-        b = ser.read(1)
-        if DEBUG:
-            print(b)
-        pass
+    wait_confirmation(RESP_UPDATE)
     
 
     if DEBUG:
@@ -76,19 +79,28 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     ser.write(size + IV + metadata + metadata_hmac)
 
     # Wait for an OK from the bootloader.
-    b = ser.read(1)
-    if DEBUG:
-        print(b)
-    while b != RESP_OK:  # charcter A
-        print("Wating for confirmation...")
-        b = ser.read(1)
-        if DEBUG:
-            print(b)
+    wait_confirmation(RESP_OK)
     if DEBUG:
         print("Received confirmation :D")
 
     # if resp != RESP_OK:  
     #     raise RuntimeError("ERROR: Bootloader responded with {}".format(repr(resp)))
+def send_firmware(firmware, signature):
+    full_blocks = len(firmware) // 1024
+    extra = len(firmware) % 1024
+    for i in range(full_blocks):
+        if DEBUG:
+            print("Writing firmware frame!")
+        ser.write(SEND_FRAME)
+        size = p16(1024, endian="little")
+        ser.write(size + firmware[i * 1024: (i + 1) * 1024])
+        wait_confirmation(RESP_OK)
+    if extra:
+        ser.write(SEND_FRAME)
+        size = p16(extra)
+        ser.write(size + firmware[full_blocks * 1024:])
+        wait_confirmation(RESP_OK)
+    print("Twiddling thumbs")
 
 
 def send_frame(ser, frame, debug=False):
@@ -121,11 +133,13 @@ def update(ser, infile, debug):
     iv = firmware_blob[32:48]  
     metadata = firmware_blob[48:64]
     metadata_hmac = firmware_blob[64:96]
+    firmware = firmware_blob[96:]
 
     fw_size = u32(metadata[4:8], endian="little")
-    firmware = firmware_blob[fw_size:]
+
 
     send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)
+    send_firmware(firmware, signature)
     
     # If you reach here you should have sucsessfully sent metadata and can start to send firmware frames
 

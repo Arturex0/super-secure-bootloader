@@ -8,6 +8,7 @@ import argparse
 import os
 from pwn import *
 from Crypto.Hash import HMAC, SHA256
+from Crypto.Util.Padding import pad, unpad
 import struct
 
 DEFAULT_SECRETS="./secret_build_output.txt"
@@ -27,9 +28,9 @@ def protect_firmware(infile, outfile, version, message, secrets):
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
 
-    # Append null-terminated message to end of firmware
+    # Allocate one flash block to message that goes before firmware
     m = message.encode()
-    m_pad = m + b'0' * (1024 - len(m))
+    m_pad = m + b'\xff' * (1024 - len(m))
 
     # Shorts required but pack into ints instead
     metadata = p32(version, endian='little') + p32(len(firmware), endian='little') + \
@@ -44,9 +45,8 @@ def protect_firmware(infile, outfile, version, message, secrets):
     signature = hmac_obj.digest()
     iv = os.urandom(16)
 
-
     #signature gets sent in at the end in seperate block
-    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + firmware
+    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + pad(firmware, 16)
 
 
     # Write firmware blob to outfile
