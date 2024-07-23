@@ -9,6 +9,7 @@
 #define SECRETS_HMAC_KEY_LEN 16
 #define SECRETS_HASH_LENGTH 32
 #define SECRETS_IV_LEN 16
+#define SECRETS_ENCRYPTION_BLOCK_LENGTH 16
 typedef struct _ {
 	uint8_t vault_key[SECRETS_VAULT_KEY_LEN];
 	uint8_t decrypt_key[SECRETS_DECRYPT_KEY_LEN];

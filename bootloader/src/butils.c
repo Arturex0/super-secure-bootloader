@@ -67,7 +67,7 @@ uint16_t read_short(void) {
 	return r;
 }
 
-// Reads in at most BUFFER_SIZE bytes into buffer 
+// Reads in at most READ_BUFFER_SIZE bytes into buffer 
 // This function does not perform error checking if block size is zero
 uint32_t read_frame(uint8_t * buffer) {
 	//TODO: Comute checksum and verify (Wait for acknowledge)
@@ -85,7 +85,7 @@ uint32_t read_frame(uint8_t * buffer) {
 	if (data_size == 0) {
 		return data_size;
 	}
-	if (data_size > BUFFER_SIZE) {
+	if (data_size > READ_BUFFER_SIZE) {
 		uart_write_str(UART0, "Frame size too big!\n");
 		SysCtlReset();
 	}

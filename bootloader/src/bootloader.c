@@ -36,8 +36,6 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
 void setup_vault(void);
 
-//secrets buffer
-#define BUFFER_SIZE 1024
 
 //crypto state
 
@@ -45,8 +43,8 @@ void setup_vault(void);
 Hmac hmac;
 Aes aes;
 vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
-uint8_t ct_buffer[FLASH_PAGESIZE];
-uint8_t pt_buffer[FLASH_PAGESIZE];
+uint8_t ct_buffer[READ_BUFFER_SIZE];
+uint8_t pt_buffer[READ_BUFFER_SIZE];
 
 // FLOW CHART: Allocate space for IV + encrypted data + decrypted data
 uint8_t iv[SECRETS_IV_LEN];
@@ -108,16 +106,21 @@ int main(void) {
 			// version of current firmware
 			uint32_t old_version;
 			// current block to write into flash
-			uint32_t write_block;
+			uint32_t start_block;
 			// blocks that have been written to flash (make sure to always update this if you increment write_block)
-			uint32_t blocks_written = 0;
+			uint32_t flash_block_offset = 0;
 			// pointers to newly received metadata block and old metadata blocks
 			metadata_blob *old_mb;
 			metadata_blob *new_mb;
 			// partition to change trust to
 			enum STORAGE_PART_STATUS new_permissions;
+			// for calculating flash offsets
+			uint32_t addr;
 
+			// did the metadata pass hmac
 			bool passed;
+			// did we receive a < BUFFER_LENGTH size when reading in firmware?
+			bool ending = false;
 
             uart_write_str(UART0, "U");
 
@@ -148,7 +151,7 @@ int main(void) {
 			switch (vault_addr->s) {
 				// Write to partition B, read old metadata from partition A
 				case STORAGE_TRUST_A:
-					write_block = STORAGE_PARTB;
+					start_block = STORAGE_PARTB;
 					new_permissions = STORAGE_TRUST_B;
 
 					old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) - sizeof(metadata_blob));
@@ -156,7 +159,7 @@ int main(void) {
 					break;
 				// Write to partition A, read old metadata from partition B
 				case STORAGE_TRUST_B:
-					write_block = STORAGE_PARTA;
+					start_block = STORAGE_PARTA;
 					new_permissions = STORAGE_TRUST_A;
 
 					old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) - sizeof(metadata_blob));
@@ -164,7 +167,7 @@ int main(void) {
 					break;
 				// By default write to A, firmware version is always 1	
 				case STORAGE_TRUST_NONE:
-					write_block = STORAGE_PARTA;
+					start_block = STORAGE_PARTA;
 					new_permissions = STORAGE_TRUST_A;
 					old_version = 1;
 			}
@@ -190,18 +193,106 @@ int main(void) {
 				SysCtlReset();
 			}
 
-			if (blocks_written > STORAGE_PART_SIZE) {
+			if (flash_block_offset >= STORAGE_PART_SIZE) {
 				uart_write_str(UART0, "no storage :<\n");
 				SysCtlReset();
 			}
-			FlashErase(write_block << 10);
-			FlashProgram((uint32_t *) new_mb, write_block + FLASH_PAGESIZE - sizeof(metadata_blob), sizeof(metadata_blob));
-			blocks_written++;
-			write_block++;
+
+			addr = (start_block + flash_block_offset) << 10;
+			if (FlashErase(addr)) {
+				uart_write_str(UART0, "couldn't erase flash :sob:\n");
+				SysCtlReset();
+			}
+			addr = addr + FLASH_PAGESIZE - sizeof(metadata_blob);
+			if (FlashProgram((uint32_t *) new_mb, addr, sizeof(metadata_blob))) {
+
+				uart_write_str(UART0, "couldn't write metadata :skull:\n");
+				SysCtlReset();
+			}
+			flash_block_offset++;
 
 			// Acknowledge this frame because it is legitimate, prepare for another frame
 			uart_write_str(UART0, "A");
 
+			// ========== FIRMWARE ==========
+
+			// Start reading in message data + other data
+			while (true) {
+
+				size = read_frame(ct_buffer);
+
+				// FLOW CHART: Size = 0?
+				if (size == 0) {
+					break;
+				}
+
+				// When a partial block is sent data should stop being read
+				if (ending) {
+					uart_write_str(UART0, "do not write non signature data after a partial block\n");
+					SysCtlReset();
+				}
+
+				if (size == READ_BUFFER_SIZE) {
+					ending = true;
+				}
+
+				// is this size a multiple of AES/other function block size (16)?
+				// ensuring this just makes decryption easier :D
+				if (size % SECRETS_ENCRYPTION_BLOCK_LENGTH) {
+					uart_write_str(UART0, "partial block received, can't decrypt\n");
+					SysCtlReset();
+				}
+
+				// FLOW CHART: is flash_block_offset < 99?
+				if (flash_block_offset >= STORAGE_PART_SIZE - 1) {
+					uart_write_str(UART0, "We not beaver balling\n");
+					SysCtlReset();
+				}
+				addr = (start_block + flash_block_offset) << 10;
+				flash_block_offset++;
+
+				// Write to flash
+				program_flash((void *) addr, ct_buffer, size);
+				// Update hash function
+
+				if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
+					uart_write_str(UART0, "Crypto oopsie\n");
+					SysCtlReset();
+
+				}
+
+				// Acknowledge this block
+				uart_write_str(UART0, "A");
+			}
+			// This shouldn't happen but added for redundency
+			if (flash_block_offset >= STORAGE_PART_SIZE) {
+				uart_write_str(UART0, "No space for signature :(");
+				SysCtlReset();
+			}
+			//handle signature :D
+			int read = 0;
+			for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+				ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
+			}
+			if (wc_HmacFinal(&hmac, &ct_buffer[SECRETS_HASH_LENGTH]) != 0) {
+				uart_write_str(UART0, "Couldn't compute hash");
+				SysCtlReset();
+			}
+			passed = true;
+			for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+				if (ct_buffer[i] != ct_buffer[SECRETS_HASH_LENGTH + i]) {
+					passed = false;
+				}
+			}
+			if (passed) {
+				uart_write_str(UART0, "omg you are pro gamer!!!!\n");
+			} else {
+				uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
+				SysCtlReset();
+			}
+			addr = (start_block + flash_block_offset) << 10;
+			program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
+			uart_write_str(UART0, "A");
 
             //load_firmware();
             //uart_write_str(UART0, "Loaded new firmware.\n");

@@ -8,10 +8,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#define IV_LEN 16
-
 //secrets buffer
-#define BUFFER_SIZE 1024
+#define READ_BUFFER_SIZE 1024
+
+#define IV_LEN 16
 
 // FLASH Constants
 #define FLASH_PAGESIZE 1024
