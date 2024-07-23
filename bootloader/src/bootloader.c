@@ -113,7 +113,7 @@ int main(void) {
 			metadata_blob *old_mb;
 			metadata_blob *new_mb;
 			// partition to change trust to
-			enum STORAGE_PART_STATUS new_permissions;
+			enum STORAGE_PART_STATUS new_permissions = STORAGE_TRUST_NONE;
 			// for calculating flash offsets
 			uint32_t addr;
 
@@ -153,23 +153,28 @@ int main(void) {
 				case STORAGE_TRUST_A:
 					start_block = STORAGE_PARTB;
 					new_permissions = STORAGE_TRUST_B;
+					uart_write_str(UART0, "Trust a\n");
 
-					old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) - sizeof(metadata_blob));
+					old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 					old_version = old_mb->metadata.fw_version;
+					old_version = 1;
 					break;
 				// Write to partition A, read old metadata from partition B
 				case STORAGE_TRUST_B:
 					start_block = STORAGE_PARTA;
 					new_permissions = STORAGE_TRUST_A;
+					uart_write_str(UART0, "Trust b\n");
 
-					old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) - sizeof(metadata_blob));
+					old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 					old_version = old_mb->metadata.fw_version;
+					old_version = 1;
 					break;
 				// By default write to A, firmware version is always 1	
 				case STORAGE_TRUST_NONE:
 					start_block = STORAGE_PARTA;
 					new_permissions = STORAGE_TRUST_A;
 					old_version = 1;
+					uart_write_str(UART0, "Trust no one\n");
 			}
 			// Not needed afterwards so throw it away
 			old_mb = NULL;
@@ -304,14 +309,54 @@ int main(void) {
 				SysCtlReset();
 			}
 
-			program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault));
+			if (program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault))) {
+				uart_write_str(UART0, "Can't program flash :thonk:\n");
+			}
+
 			uart_write_str(UART0, "A");
+			// can shorten this but it needs to not be so short that the string isn't written
+			SysCtlDelay(700000);
 			SysCtlReset();
 
         } else if (instruction == BOOT) {
+			uint32_t start_block;
+			metadata_blob *mb;
             uart_write_str(UART0, "B");
             uart_write_str(UART0, "Booting firmware...\n");
-            boot_firmware();
+
+			if (vault_addr->magic == VAULT_MAGIC) {
+				uart_write_str(UART0, "No corrupted vault :D\n");
+			}
+
+			switch (vault_addr->s) {
+				case STORAGE_TRUST_A:
+					start_block = STORAGE_PARTB;
+					mb = (metadata_blob *) ((STORAGE_PARTA << 10) - sizeof(metadata_blob));
+					uart_write_str(UART0, "I'm gonna boot from A :D\n");
+
+					SysCtlDelay(700000);
+					__asm("LDR R0,=0xe801\n\t"
+						  "BX R0\n\t");
+
+					break;
+				case STORAGE_TRUST_B:
+					start_block = STORAGE_PARTA;
+					mb = (metadata_blob *) ((STORAGE_PARTB << 10) - sizeof(metadata_blob));
+					uart_write_str(UART0, "I'm gonna boot from B :D\n");
+
+					SysCtlDelay(700000);
+					__asm("LDR R0,=0x27801\n\t"
+						  "BX R0\n\t");
+
+					break;
+
+				case STORAGE_TRUST_NONE:
+					uart_write_str(UART0, "Sorry, my mind is blank\n");
+					SysCtlReset();
+			}
+			while (1) {
+				//be lazy
+			}
         }
     }
 }
