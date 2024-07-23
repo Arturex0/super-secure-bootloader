@@ -103,7 +103,6 @@ int main(void) {
 			update_firmware();
 
         } else if (instruction == BOOT) {
-			uint32_t start_block;
 			metadata_blob *mb;
             uart_write_str(UART0, "B");
             uart_write_str(UART0, "Booting firmware...\n");
@@ -115,7 +114,6 @@ int main(void) {
 			uint8_t * m_addr;
 			switch (vault_addr->s) {
 				case STORAGE_TRUST_A:
-					start_block = STORAGE_PARTB;
 					mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 					uart_write_str(UART0, "I'm gonna boot from A :D\n");
 
@@ -131,7 +129,6 @@ int main(void) {
 
 					break;
 				case STORAGE_TRUST_B:
-					start_block = STORAGE_PARTA;
 					mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 					uart_write_str(UART0, "I'm gonna boot from B :D\n");
 
@@ -162,11 +159,9 @@ int main(void) {
  * Load the firmware into flash.
  */
 void load_firmware(void) {
-    int frame_length = 0;
     int read = 0;
     uint32_t rcv = 0;
 
-    uint32_t data_index = 0;
     uint32_t version = 0;
     uint32_t size = 0;
 
@@ -192,8 +187,8 @@ void update_firmware(void) {
 	uint32_t size;
 	// version of current firmware
 	uint32_t old_version;
-	// current block to write into flash
-	uint32_t start_block;
+	// current block to write into flash (initialize to write to invalid area)
+	uint32_t start_block = 300;
 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
 	uint32_t flash_block_offset = 0;
 	// pointers to newly received metadata block and old metadata blocks
