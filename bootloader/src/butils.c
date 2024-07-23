@@ -93,7 +93,10 @@ uint32_t read_frame(uint8_t * buffer) {
 		buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
 
-	uart_write_str(UART0, "A");
+	// Do not write acknowledge in this function, instead it is up to the caller to run logic and acknowledge the frame \
+	// Only write a restart here if frame is corrupted
+	
+	//uart_write_str(UART0, "A");
 	return data_size;
 
 	//resend, checksum failed
