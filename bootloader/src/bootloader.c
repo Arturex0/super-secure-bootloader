@@ -232,7 +232,7 @@ int main(void) {
 					SysCtlReset();
 				}
 
-				if (size == READ_BUFFER_SIZE) {
+				if (size != READ_BUFFER_SIZE) {
 					ending = true;
 				}
 
@@ -292,11 +292,22 @@ int main(void) {
 			}
 			addr = (start_block + flash_block_offset) << 10;
 			program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
-			uart_write_str(UART0, "A");
 
-            //load_firmware();
-            //uart_write_str(UART0, "Loaded new firmware.\n");
-            //nl(UART0);
+			vault_struct new_vault = {
+				VAULT_MAGIC,
+				new_permissions
+			};
+
+			// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
+			if (sizeof(new_vault) % 4) {
+				uart_write_str(UART0, "oops messed up struct alignment\n");
+				SysCtlReset();
+			}
+
+			program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault));
+			uart_write_str(UART0, "A");
+			SysCtlReset();
+
         } else if (instruction == BOOT) {
             uart_write_str(UART0, "B");
             uart_write_str(UART0, "Booting firmware...\n");
