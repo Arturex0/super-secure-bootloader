@@ -1,6 +1,9 @@
 #include "bootloader.h"
 #include "secret_partition.h"
 #include "secrets.h"
+#include "metadata.h"
+#include "storage.h"
+#include "butils.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -24,62 +27,29 @@
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/sha.h"
 #include "wolfssl/wolfcrypt/rsa.h"
+#include "wolfssl/wolfcrypt/hmac.h"
 
 // Forward Declarations
 void load_firmware(void);
+void update_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
-
-// Firmware Constants
-#define METADATA_BASE 0xFC00 // base address of version and firmware size in Flash
-#define FW_BASE 0x10000      // base address of firmware in Flash
+bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
+void setup_vault(void);
 
 
-// FLASH Constants
-#define FLASH_PAGESIZE 1024
-#define FLASH_WRITESIZE 4
+//crypto state
 
-// Protocol Constants
-#define OK ((unsigned char)0x00)
-#define ERROR ((unsigned char)0x01)
-#define UPDATE ((unsigned char)'U')
-#define BOOT ((unsigned char)'B')
+// FLOW CHART: Initialize import state
+Hmac hmac;
+Aes aes;
+vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
+secrets_struct secrets;
+uint8_t ct_buffer[READ_BUFFER_SIZE];
+uint8_t pt_buffer[READ_BUFFER_SIZE];
 
-// Define secrets block (56th block)
-
-// Device metadata
-uint16_t * fw_version_address = (uint16_t *)METADATA_BASE;
-uint16_t * fw_size_address = (uint16_t *)(METADATA_BASE + 2);
-uint8_t * fw_release_message_address;
-
-// Firmware Buffer
-unsigned char data[FLASH_PAGESIZE];
-
-// Delay to allow time to connect GDB
-// green LED as visual indicator of when this function is running
-void debug_delay_led() {
-
-    // Enable the GPIO port that is used for the on-board LED.
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-
-    // Check if the peripheral access is enabled.
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {
-    }
-
-    // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
-    // enable the GPIO pin for digital function.
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-
-    // Turn on the green LED
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-
-    // Wait
-    SysCtlDelay(SysCtlClockGet() * 2);
-
-    // Turn off the green LED
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0);
-}
-
+// FLOW CHART: Allocate space for IV + encrypted data + decrypted data
+uint8_t iv[SECRETS_IV_LEN];
 
 int main(void) {
 	uint32_t eeprom_status;
@@ -94,8 +64,6 @@ int main(void) {
     // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
     // enable the GPIO pin for digital function.
     GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-
-    // debug_delay_led();
 
     initialize_uarts(UART0);
 
@@ -115,9 +83,14 @@ int main(void) {
 	setup_secrets();
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
-	secrets_struct secrets;
+
+	// Funny crypto shenanigans
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
+	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
+		uart_write_str(UART0, "FATAL hmac key error\n");
+		SysCtlReset();
+	}
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
     uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");
@@ -127,29 +100,68 @@ int main(void) {
         uint32_t instruction = uart_read(UART0, BLOCKING, &resp);
 
         if (instruction == UPDATE) {
-            uart_write_str(UART0, "U");
-            load_firmware();
-            uart_write_str(UART0, "Loaded new firmware.\n");
-            nl(UART0);
+			update_firmware();
+
         } else if (instruction == BOOT) {
+			metadata_blob *mb;
             uart_write_str(UART0, "B");
             uart_write_str(UART0, "Booting firmware...\n");
-            boot_firmware();
+
+			if (vault_addr->magic == VAULT_MAGIC) {
+				uart_write_str(UART0, "No corrupted vault :D\n");
+			}
+
+			uint8_t * m_addr;
+			switch (vault_addr->s) {
+				case STORAGE_TRUST_A:
+					mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+					uart_write_str(UART0, "I'm gonna boot from A :D\n");
+
+					// Write the message
+					m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
+					for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
+						uart_write(UART0, m_addr[i]);
+					}
+
+					SysCtlDelay(700000);
+					__asm("LDR R0,=0xe801\n\t"
+						  "BX R0\n\t");
+
+					break;
+				case STORAGE_TRUST_B:
+					mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+					uart_write_str(UART0, "I'm gonna boot from B :D\n");
+
+					// Write the message
+					m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
+					for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
+						uart_write(UART0, m_addr[i]);
+					}
+
+					SysCtlDelay(700000);
+					__asm("LDR R0,=0x27801\n\t"
+						  "BX R0\n\t");
+
+					break;
+
+				case STORAGE_TRUST_NONE:
+					uart_write_str(UART0, "Sorry, my mind is blank\n");
+					SysCtlReset();
+			}
+			while (1) {
+				//be lazy
+			}
         }
     }
 }
-
 
  /*
  * Load the firmware into flash.
  */
 void load_firmware(void) {
-    int frame_length = 0;
     int read = 0;
     uint32_t rcv = 0;
 
-    uint32_t data_index = 0;
-    uint32_t page_addr = FW_BASE;
     uint32_t version = 0;
     uint32_t size = 0;
 
@@ -167,158 +179,263 @@ void load_firmware(void) {
 
     // Compare to old version and abort if older (note special case for version 0).
     // If no metadata available (0xFFFF), accept version 1
-    uint16_t old_version = *fw_version_address;
-    if (old_version == 0xFFFF) {
-        old_version = 1;
-    }
+}
+void update_firmware(void) {
 
-    if (version != 0 && version < old_version) {
-        uart_write(UART0, ERROR); // Reject the metadata.
-        SysCtlReset();            // Reset device
-        return;
-    } else if (version == 0) {
-        // If debug firmware, don't change version
-        version = old_version;
-    }
+	// ========== Funny metadata shenanigans =========
+	//Read a frame and ensure it matches the size of metadata
+	uint32_t size;
+	// version of current firmware
+	uint32_t old_version;
+	// current block to write into flash (initialize to write to invalid area)
+	uint32_t start_block = 300;
+	// blocks that have been written to flash (make sure to always update this if you increment write_block)
+	uint32_t flash_block_offset = 0;
+	// pointers to newly received metadata block and old metadata blocks
+	metadata_blob *old_mb;
+	metadata_blob *new_mb;
+	// partition to change trust to
+	enum STORAGE_PART_STATUS new_permissions = STORAGE_TRUST_NONE;
+	// for calculating flash offsets
+	uint32_t addr;
 
-    // Write new firmware size and version to Flash
-    // Create 32 bit word for flash programming, version is at lower address, size is at higher address
-    uint32_t metadata = ((size & 0xFFFF) << 16) | (version & 0xFFFF);
-    program_flash((uint8_t *) METADATA_BASE, (uint8_t *)(&metadata), 4);
+	// did the metadata pass hmac
+	bool passed;
+	// did we receive a < BUFFER_LENGTH size when reading in firmware?
+	bool ending = false;
 
-    uart_write(UART0, OK); // Acknowledge the metadata.
+	uart_write_str(UART0, "U");
 
-    /* Loop here until you can get all your characters and stuff */
-    while (1) {
+	// FLOW CHART: Read in IV + metadata chunk into memory
+	size = read_frame(ct_buffer);
+	new_mb = (metadata_blob *) &ct_buffer;
+	if (size != sizeof(metadata_blob)) {
+		uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
+		SysCtlReset();
+	}
 
-        // Get two bytes for the length.
-        rcv = uart_read(UART0, BLOCKING, &read);
-        frame_length = (int)rcv << 8;
-        rcv = uart_read(UART0, BLOCKING, &read);
-        frame_length += (int)rcv;
+	// save iv in global (useful)
+	memcpy(&iv, &new_mb->iv, sizeof(new_mb->iv));
 
-        // Get the number of bytes specified
-        for (int i = 0; i < frame_length; ++i) {
-            data[data_index] = uart_read(UART0, BLOCKING, &read);
-            data_index += 1;
-        } // for
+	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
-        // If we filed our page buffer, program it
-        if (data_index == FLASH_PAGESIZE || frame_length == 0) {
-            // Try to write flash and check for error
-            if (program_flash((uint8_t *) page_addr, data, data_index)) {
-                uart_write(UART0, ERROR); // Reject the firmware
-                SysCtlReset();            // Reset device
-                return;
-            }
+	wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
+	wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
 
-            // Update to next page
-            page_addr += FLASH_PAGESIZE;
-            data_index = 0;
+	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
+	// FLOW CHART: metadata signature good?
+	if (!passed) {
+		uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
+		SysCtlReset();
+	}
+	uart_write_str(UART0, "you're did it\n");
 
-            // If at end of firmware, go to main
-            if (frame_length == 0) {
-                uart_write(UART0, OK);
-                break;
-            }
-        } // if
+	switch (vault_addr->s) {
+		// Write to partition B, read old metadata from partition A
+		case STORAGE_TRUST_A:
+			start_block = STORAGE_PARTB;
+			new_permissions = STORAGE_TRUST_B;
+			uart_write_str(UART0, "Trust a\n");
 
-        uart_write(UART0, OK); // Acknowledge the frame.
-    } // while(1)
+			old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+			old_version = old_mb->metadata.fw_version;
+			old_version = 1;
+			break;
+		// Write to partition A, read old metadata from partition B
+		case STORAGE_TRUST_B:
+			start_block = STORAGE_PARTA;
+			new_permissions = STORAGE_TRUST_A;
+			uart_write_str(UART0, "Trust b\n");
+
+			old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+			old_version = old_mb->metadata.fw_version;
+			old_version = 1;
+			break;
+		// By default write to A, firmware version is always 1	
+		case STORAGE_TRUST_NONE:
+			start_block = STORAGE_PARTA;
+			new_permissions = STORAGE_TRUST_A;
+			old_version = 1;
+			uart_write_str(UART0, "Trust no one\n");
+	}
+	// Not needed afterwards so throw it away
+	old_mb = NULL;
+
+	// Handle debug case (if zero just set it to old version)
+	if (new_mb->metadata.fw_version == 0) {
+		new_mb->metadata.fw_version = old_version;
+	}
+
+	// FLOW CHART: Metadata version good?
+	if (new_mb->metadata.fw_version < old_version) {
+		uart_write_str(UART0, "wtf devolving\n");
+		SysCtlReset();
+	}
+
+	// Flash the funny metadata into memory
+
+	// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
+	if (sizeof(metadata_blob) % 4) {
+		uart_write_str(UART0, "oops messed up struct alignment\n");
+		SysCtlReset();
+	}
+
+	if (flash_block_offset >= STORAGE_PART_SIZE) {
+		uart_write_str(UART0, "no storage :<\n");
+		SysCtlReset();
+	}
+
+	addr = (start_block + flash_block_offset) << 10;
+	if (FlashErase(addr)) {
+		uart_write_str(UART0, "couldn't erase flash :sob:\n");
+		SysCtlReset();
+	}
+	addr = addr + FLASH_PAGESIZE - sizeof(metadata_blob);
+	if (FlashProgram((uint32_t *) new_mb, addr, sizeof(metadata_blob))) {
+
+		uart_write_str(UART0, "couldn't write metadata :skull:\n");
+		SysCtlReset();
+	}
+	flash_block_offset++;
+
+	// Acknowledge this frame because it is legitimate, prepare for another frame
+	uart_write_str(UART0, "A");
+
+	// ========== FIRMWARE ==========
+
+	// Start reading in message data + other data
+	while (true) {
+
+		size = read_frame(ct_buffer);
+
+		// FLOW CHART: Size = 0?
+		if (size == 0) {
+			break;
+		}
+
+		// When a partial block is sent data should stop being read
+		if (ending) {
+			uart_write_str(UART0, "do not write non signature data after a partial block\n");
+			SysCtlReset();
+		}
+
+		if (size != READ_BUFFER_SIZE) {
+			ending = true;
+		}
+
+		// is this size a multiple of AES/other function block size (16)?
+		// ensuring this just makes decryption easier :D
+		if (size % SECRETS_ENCRYPTION_BLOCK_LENGTH) {
+			uart_write_str(UART0, "partial block received, can't decrypt\n");
+			SysCtlReset();
+		}
+
+		// FLOW CHART: is flash_block_offset < 99?
+		if (flash_block_offset >= STORAGE_PART_SIZE - 1) {
+			uart_write_str(UART0, "We not beaver balling\n");
+			SysCtlReset();
+		}
+		addr = (start_block + flash_block_offset) << 10;
+		flash_block_offset++;
+
+		// Write to flash
+		program_flash((void *) addr, ct_buffer, size);
+		// Update hash function
+
+		if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
+			uart_write_str(UART0, "Crypto oopsie\n");
+			SysCtlReset();
+
+		}
+
+		// Acknowledge this block
+		uart_write_str(UART0, "A");
+	}
+	// This shouldn't happen but added for redundency
+	if (flash_block_offset >= STORAGE_PART_SIZE) {
+		uart_write_str(UART0, "No space for signature :(");
+		SysCtlReset();
+	}
+	//handle signature :D
+	int read = 0;
+	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
+	}
+	if (wc_HmacFinal(&hmac, &ct_buffer[SECRETS_HASH_LENGTH]) != 0) {
+		uart_write_str(UART0, "Couldn't compute hash");
+		SysCtlReset();
+	}
+	passed = true;
+	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+		if (ct_buffer[i] != ct_buffer[SECRETS_HASH_LENGTH + i]) {
+			passed = false;
+		}
+	}
+	if (passed) {
+		uart_write_str(UART0, "omg you are pro gamer!!!!\n");
+	} else {
+		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
+		SysCtlReset();
+	}
+	addr = (start_block + flash_block_offset) << 10;
+	program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
+
+	vault_struct new_vault = {
+		VAULT_MAGIC,
+		new_permissions
+	};
+
+	// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
+	if (sizeof(new_vault) % 4) {
+		uart_write_str(UART0, "oops messed up struct alignment\n");
+		SysCtlReset();
+	}
+
+	if (program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault))) {
+		uart_write_str(UART0, "Can't program flash :thonk:\n");
+	}
+
+	uart_write_str(UART0, "A");
+	// can shorten this but it needs to not be so short that the string isn't written
+	SysCtlDelay(700000);
+	SysCtlReset();
 }
 
-/*
- * Program a stream of bytes to the flash.
- * This function takes the starting address of a 1KB page, a pointer to the
- * data to write, and the number of byets to write.
- *
- * This functions performs an erase of the specified flash page before writing
- * the data.
- */
-long program_flash(void* page_addr, unsigned char * data, unsigned int data_len) {
-    uint32_t word = 0;
-    int ret;
-    int i;
 
-    // Erase next FLASH page
-    FlashErase((uint32_t) page_addr);
-
-    // Clear potentially unused bytes in last word
-    // If data not a multiple of 4 (word size), program up to the last word
-    // Then create temporary variable to create a full last word
-    if (data_len % FLASH_WRITESIZE) {
-        // Get number of unused bytes
-        int rem = data_len % FLASH_WRITESIZE;
-        int num_full_bytes = data_len - rem;
-
-        // Program up to the last word
-        ret = FlashProgram((unsigned long *)data, (uint32_t) page_addr, num_full_bytes);
-        if (ret != 0) {
-            return ret;
-        }
-
-        // Create last word variable -- fill unused with 0xFF
-        for (i = 0; i < rem; i++) {
-            word = (word >> 8) | (data[num_full_bytes + i] << 24); // Essentially a shift register from MSB->LSB
-        }
-        for (i = i; i < 4; i++) {
-            word = (word >> 8) | 0xFF000000;
-        }
-
-        // Program word
-        return FlashProgram(&word, (uint32_t) page_addr + num_full_bytes, 4);
-    } else {
-        // Write full buffer of 4-byte words
-        return FlashProgram((unsigned long *)data, (uint32_t) page_addr, data_len);
-    }
-}
-
+// Implement this in the future
 void boot_firmware(void) {
-    // Check if firmware loaded
-    int fw_present = 0;
-    for (uint8_t* i = (uint8_t*) FW_BASE; i < (uint8_t*) FW_BASE + 20; i++) {
-        if (*i != 0xFF) {
-            fw_present = 1;
-        }
-    }
-
-    if (!fw_present) {
-        uart_write_str(UART0, "No firmware loaded.\n");
-        SysCtlReset();            // Reset device
-        return;
-    }
-
-    // compute the release message address, and then print it
-    uint16_t fw_size = *fw_size_address;
-    fw_release_message_address = (uint8_t *)(FW_BASE + fw_size);
-    uart_write_str(UART0, (char *)fw_release_message_address);
-
-    // Boot the firmware
+	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
+	while (1) {
+	}
     __asm("LDR R0,=0x10001\n\t"
           "BX R0\n\t");
 }
 
-void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
-    for (uint8_t * cursor = start; cursor < (start + len); cursor += 1) {
-        uint8_t data = *((uint8_t *)cursor);
-        uint8_t right_nibble = data & 0xF;
-        uint8_t left_nibble = (data >> 4) & 0xF;
-        char byte_str[3];
-        if (right_nibble > 9) {
-            right_nibble += 0x37;
-        } else {
-            right_nibble += 0x30;
-        }
-        byte_str[1] = right_nibble;
-        if (left_nibble > 9) {
-            left_nibble += 0x37;
-        } else {
-            left_nibble += 0x30;
-        }
-        byte_str[0] = left_nibble;
-        byte_str[2] = '\0';
+// verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
+bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash){
+    Hmac hmac;
 
-        uart_write_str(uart, byte_str);
-        uart_write_str(uart, " ");
-    }
+    if (wc_HmacSetKey(&hmac, WC_SHA256, key, SECRETS_HMAC_KEY_LEN) != 0) {
+        uart_write_str(UART0, "Couldn't init HMAC");
+        SysCtlReset();
 }
+
+    if( wc_HmacUpdate(&hmac, data, data_len) != 0) {
+    uart_write_str(UART0, "Couldn't init HMAC");
+    SysCtlReset();
+}
+
+    uint8_t hash[SECRETS_HASH_LENGTH]; // 256/8 = 32
+    if (wc_HmacFinal(&hmac, hash) != 0) {
+        uart_write_str(UART0, "Couldn't compute hash");
+        SysCtlReset();
+	}
+	bool ret = true;
+	for (uint32_t i = 0; i < SECRETS_HASH_LENGTH; i++) {
+		if (test_hash[i] != hash[i]) {
+			ret = false;
+		}
+	}
+	return ret;
+}
+
