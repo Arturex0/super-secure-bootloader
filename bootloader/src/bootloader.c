@@ -111,6 +111,9 @@ int main(void) {
 			uint8_t * m_addr;
 			switch (vault_addr->s) {
 				case STORAGE_TRUST_A:
+
+					// TODO: VERIFY FIRMWARE !!!
+
 					mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 					uart_write_str(UART0, "I'm gonna boot from A :D\n");
 
@@ -123,6 +126,11 @@ int main(void) {
 					SysCtlDelay(700000);
 					__asm("LDR R0,=0xe801\n\t"
 						  "BX R0\n\t");
+
+
+					// The code should never reach this point 
+					while(1);
+					
 
 					break;
 				case STORAGE_TRUST_B:
@@ -436,6 +444,32 @@ void boot_firmware(void) {
 	}
     __asm("LDR R0,=0x10001\n\t"
           "BX R0\n\t");
+}
+
+
+// Inclomplete test functions
+
+void jump_to_fw(void) {
+    // Get the application's reset vector address
+    uint32_t fw_reset_vector = *(volatile uint32_t *)(RAM_START_ADDRESS + 4);
+
+    // Create a function pointer to the reset handler
+    pFunction fw_entry = (pFunction)app_reset_vector;
+
+    // Set the application's stack pointer
+    __set_MSP(*(volatile uint32_t *)RAM_START_ADDRESS);
+
+    // Jump to the application's reset handler
+    fw_entry();
+}
+
+
+void CopyFlashToRAM(void) {
+    uint32_t *flash_ptr = (uint32_t *)FLASH_START_ADDRESS;
+    uint32_t *ram_ptr = (uint32_t *)RAM_START_ADDRESS;
+    for (uint32_t i = 0; i < (APPLICATION_SIZE / sizeof(uint32_t)); i++) {
+        ram_ptr[i] = flash_ptr[i];
+    }
 }
 
 // verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
