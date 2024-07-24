@@ -439,3 +439,21 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 	return ret;
 }
 
+// Takes in data and proposed checksum and returns bool of verification
+bool verify_checksum(given_checksum, data){
+
+	// length of the array of data in words 1024 buffer/32 bit word = 32, and array
+	uint16_t checksum = ROM_Crc16Array(32, data);
+
+	if(checksum == given_checksum){
+
+		return true;
+	}
+	return false;
+
+
+
+
+
+
+}

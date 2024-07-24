@@ -39,6 +39,23 @@ SEND_FRAME = b"F"
 FRAME_SIZE = 1024
 DEBUG = True
 
+
+# calculates a crc 16- IBM checksum, becasue board had that funcitonality
+def calc_checksum(): 
+    poly = 0xA001
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+
+        for j in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ poly
+            else:
+                crc >>= 1
+
+    return crc & 0xFFFF
+
+
 def wait_confirmation(response):
     print("Waiting for bootloader response....")
     b = ser.read(1)
