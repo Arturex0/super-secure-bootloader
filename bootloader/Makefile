@@ -1,3 +1,7 @@
+# Detect the operating system and architecture
+OS := $(shell uname -s)
+ARCH := $(shell uname -m)
+
 BOOTLOADER_ROOT=.
 LIB=../lib
 INC=./inc
@@ -30,7 +34,15 @@ uart:
 	make -C ${LIB}/uart
 
 # WOLFSSL CONFIGURATION
-TOOLCHAIN = /usr/local/bin/arm-none-eabi-
+TOOLCHAIN = /usr/bin/arm-none-eabi-
+
+# Set TOOLCHAIN based on OS and architecture
+ifeq ($(OS), Darwin)
+    ifeq ($(ARCH), x86_64)
+        TOOLCHAIN := /usr/local/bin/arm-none-eabi-
+    endif
+endif
+
 USER_SETTINGS_DIR = $(abspath ${INC})
 ARCHFLAGS = "-mcpu=cortex-m4 -mthumb -mabi=aapcs -mfpu=fpv4-sp-d16 -mfloat-abi=hard"
 NO_EXAMPLES = true
