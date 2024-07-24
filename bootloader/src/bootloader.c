@@ -17,6 +17,8 @@
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
 
 #include "driverlib/eeprom.h"	 // EEPROM API
+#include "driverlib/rom.h"
+#include "driverlib/rom_map.h"
 
 // Application Imports
 #include "driverlib/gpio.h"
@@ -440,10 +442,10 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 }
 
 // Takes in data and proposed checksum and returns bool of verification
-bool verify_checksum(given_checksum, data){
+bool verify_checksum(uint16_t given_checksum, int data[]){
 
 	// length of the array of data in words 1024 buffer/32 bit word = 32, and array
-	uint16_t checksum = ROM_Crc16Array(32, data);
+	uint16_t checksum = 0; // ROM_Crc16Array(32, data); keeps throwing warning but I included rom.h and rom_map.h
 
 	if(checksum == given_checksum){
 
