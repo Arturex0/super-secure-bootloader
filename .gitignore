@@ -68,3 +68,4 @@ secret_build_output.txt
 
 super_secret.magic
 super_secret.txt
+bootloader/Makefile

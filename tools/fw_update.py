@@ -29,7 +29,8 @@ import serial
 
 from util import *
 
-ser = serial.Serial("/dev/ttyACM0", 115200)
+
+ser = ""
 
 RESP_OK = b"A"
 RESP_UPDATE = b"U"
@@ -173,6 +174,12 @@ if __name__ == "__main__":
     parser.add_argument("--firmware", help="Path to firmware image to load.", required=False)
     parser.add_argument("--debug", help="Enable debugging messages.", action="store_true")
     args = parser.parse_args()
+
+    if args.port == None:
+        ser = serial.Serial("/dev/ttyACM0", 115200)
+    else:
+
+        ser = serial.Serial(args.port, 115200)
 
     update(ser=ser, infile=args.firmware, debug=args.debug)
     ser.close()
