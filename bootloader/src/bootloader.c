@@ -422,7 +422,7 @@ void boot_firmware(){
 			// "BX R0\n\t");
 
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTA + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
-			jump_to_fw(0x20000000, 0x20007FFF);
+			jump_to_fw(0x20000001, 0x20007FF0);
 
 
 			// The code should never reach this point 
@@ -447,7 +447,7 @@ void boot_firmware(){
 			// DELETE THE MESSAGE ^^^
 
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTB + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
-			jump_to_fw(0x20000000, 0x20007FFF);
+			jump_to_fw(0x20000001, 0x20007FF0);
 
 
 			// __asm("LDR R0,=0x27801\n\t"
@@ -476,10 +476,10 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 	uint32_t fw_stack_pointer = sram_end;
 
 	// Get the application's reset vector address from the SRAM start address + 4 (after initial SP)
-    uint32_t fw_reset_vector = *(volatile uint32_t *)(sram_start + 4);
+    uint32_t fw_reset_vector = (volatile uint32_t)(sram_start);
 
 	// Create a function pointer to the reset handler
-    pFunction fw_entry = (pFunction)fw_reset_vector;
+    pFunction fw_entry = (pFunction) fw_reset_vector;
 
     // Set the application's stack pointer
     __asm volatile ("msr msp, %0" :: "r" (fw_stack_pointer) : );
