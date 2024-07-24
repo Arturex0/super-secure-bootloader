@@ -38,7 +38,6 @@ def protect_firmware(infile, outfile, version, message, secrets):
     # don't use the padded firmware length use normal length
     metadata = p32(version, endian='little') + p32(len(firmware), endian='little') + \
                p32(len(m), endian='little') + p32(0, endian='little')
-    print(metadata)
 
     hmac_obj.update(metadata)
     metadata_hmac = hmac_obj.digest()
@@ -46,7 +45,8 @@ def protect_firmware(infile, outfile, version, message, secrets):
     #iv = os.urandom(16)
     to_encrypt = metadata + metadata_hmac + m_pad + firmware_padded
     cipher = AES.new(encrypt_key, AES.MODE_CTR)
-    iv = pad(cipher.nonce, 16)
+    iv = cipher.nonce + b'\x00' * 8
+    print(iv)
 
     encrypted_blob = cipher.encrypt(to_encrypt)
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256) 

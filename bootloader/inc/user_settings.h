@@ -277,7 +277,7 @@ extern "C" {
     //#define HAVE_AES_ECB
 
     #undef  WOLFSSL_AES_COUNTER
-    //#define WOLFSSL_AES_COUNTER
+    #define WOLFSSL_AES_COUNTER
 
     #undef  HAVE_AESCCM
     //#define HAVE_AESCCM

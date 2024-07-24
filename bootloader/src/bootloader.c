@@ -4,6 +4,7 @@
 #include "metadata.h"
 #include "storage.h"
 #include "butils.h"
+#include "user_settings.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -41,8 +42,6 @@ void setup_vault(void);
 //crypto state
 
 // FLOW CHART: Initialize import state
-Hmac hmac;
-Aes aes;
 vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
 secrets_struct secrets;
 uint8_t ct_buffer[READ_BUFFER_SIZE];
@@ -87,10 +86,6 @@ int main(void) {
 	// Funny crypto shenanigans
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
-	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
-		uart_write_str(UART0, "FATAL hmac key error\n");
-		SysCtlReset();
-	}
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
     uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");
@@ -183,44 +178,69 @@ void load_firmware(void) {
 void update_firmware(void) {
 
 	// ========== Funny metadata shenanigans =========
-	//Read a frame and ensure it matches the size of metadata
-	uint32_t size;
-	// version of current firmware
-	uint32_t old_version;
-	// current block to write into flash (initialize to write to invalid area)
-	uint32_t start_block = 300;
-	// blocks that have been written to flash (make sure to always update this if you increment write_block)
-	uint32_t flash_block_offset = 0;
-	// pointers to newly received metadata block and old metadata blocks
+	uint32_t size; 						// frame size read in
+	uint32_t old_version; 				// version of current firmware
+	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
+	uint32_t flash_block_offset = 0; 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
+
+										// pointers to newly received metadata block and old metadata blocks
 	metadata_blob *old_mb;
 	metadata_blob *new_mb;
-	// partition to change trust to
-	enum STORAGE_PART_STATUS new_permissions = STORAGE_TRUST_NONE;
-	// for calculating flash offsets
-	uint32_t addr;
+	enum STORAGE_PART_STATUS \
+		new_permissions = \
+		STORAGE_TRUST_NONE;  			// partition to change trust to
 
-	// did the metadata pass hmac
-	bool passed;
-	// did we receive a < BUFFER_LENGTH size when reading in firmware?
-	bool ending = false;
+	uint32_t addr; 						// for calculating flash offsets
+
+	bool passed; 						// did the metadata pass hmac
+	bool ending = false; 				// did we receive a < BUFFER_LENGTH size when reading in firmware?
+
+										// Useful crypto stuff
+	Hmac hmac;
+	Aes aes;
 
 	uart_write_str(UART0, "U");
 
+	// setup hmac
+	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
+		uart_write_str(UART0, "FATAL hmac key error\n");
+		SysCtlReset();
+	}
+
 	// FLOW CHART: Read in IV + metadata chunk into memory
 	size = read_frame(ct_buffer);
-	new_mb = (metadata_blob *) &ct_buffer;
+	// New metadata blob points into plaintext buffer
+	new_mb = (metadata_blob *) &pt_buffer;
 	if (size != sizeof(metadata_blob)) {
 		uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
 		SysCtlReset();
 	}
 
-	// save iv in global (useful)
-	memcpy(&iv, &new_mb->iv, sizeof(new_mb->iv));
+	// save iv in global (useful) and plaintext
+	memcpy(&iv, ct_buffer, sizeof(new_mb->iv));
+	memcpy(pt_buffer, ct_buffer, sizeof(new_mb->iv));
 
+	// setup decryption
+	if (wc_AesInit(&aes, NULL, INVALID_DEVID)) {
+		uart_write_str(UART0, "FATAL cipher error\n");
+		SysCtlReset();
+	}
+	// Direction for some modes (CFB and CTR) is always AES_ENCRYPTION.
+	if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_ENCRYPTION)){
+		uart_write_str(UART0, "second FATAL cipher error\n");
+		SysCtlReset();
+	}
+	// copy in the rest of the unencrypted firmware blob into pt
+	if (wc_AesCtrEncrypt(&aes, pt_buffer + sizeof(new_mb->iv), ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv))) {
+		uart_write_str(UART0, "Idk how to do the funny unencryption thing /shrug\n");
+		SysCtlReset();
+	}
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
-	wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
-	wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
+	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
+	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
+	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
+	uart_write_hex(UART0, new_mb->metadata.fw_version);
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 	// FLOW CHART: metadata signature good?
@@ -300,6 +320,8 @@ void update_firmware(void) {
 
 	// Acknowledge this frame because it is legitimate, prepare for another frame
 	uart_write_str(UART0, "A");
+	// New_mb is no longer needed
+	new_mb = NULL;
 
 	// ========== FIRMWARE ==========
 
@@ -338,10 +360,16 @@ void update_firmware(void) {
 		addr = (start_block + flash_block_offset) << 10;
 		flash_block_offset++;
 
-		// Write to flash
-		program_flash((void *) addr, ct_buffer, size);
-		// Update hash function
+		//decrypt block
+		if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, size)) {
+			uart_write_str(UART0, "idk how to do the crypto stuff all the cool kids are talking about\n");
+			SysCtlReset();
+		}
 
+		// Write to flash
+		program_flash((void *) addr, pt_buffer, size);
+
+		// Update hash function (this is the cipher text, not the plaintext)
 		if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
 			uart_write_str(UART0, "Crypto oopsie\n");
 			SysCtlReset();
