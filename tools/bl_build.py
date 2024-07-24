@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 Bootloader Build Tool
@@ -34,7 +34,7 @@ def make_bootloader() -> bool:
 
     os.chdir(BOOTLOADER_DIR)
 
-    #subprocess.call("make clean", shell=True)
+    subprocess.call("make clean", shell=True)
     status = subprocess.call("make")
 
     os.chdir(GEN_DIR)

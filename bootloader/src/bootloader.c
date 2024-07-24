@@ -38,8 +38,11 @@ void update_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
+void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size);
+void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 void setup_vault(void);
 
+typedef void (*pFunction)(void);
 
 //crypto state
 
@@ -55,21 +58,13 @@ uint8_t iv[SECRETS_IV_LEN];
 int main(void) {
 	uint32_t eeprom_status;
 
-    // Enable the GPIO port that is used for the on-board LED.
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-
-    // Check if the peripheral access is enabled.
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {
-    }
-
-    // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
-    // enable the GPIO pin for digital function.
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-
+	// Initialze the serail port
     initialize_uarts(UART0);
 
-
+	// Enable EEPROM
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
+
+	// While true if EEPROM is not ready
 	while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0)) {
 	}
 
@@ -77,6 +72,7 @@ int main(void) {
 	eeprom_status = EEPROMInit();
 	if (eeprom_status == EEPROM_INIT_ERROR) {
 		uart_write_str(UART0, "Fatal EEPROM error\n");
+		//Reboot
 		SysCtlReset();
 	}
 
@@ -85,14 +81,18 @@ int main(void) {
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
 
+	// TODO: Should only read vault decryption keays. Other keys are not needed rn 
 	// Funny crypto shenanigans
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
-    uart_write_str(UART0, "Send \"U\" to update, and \"B\" to run the firmware.\n");
+	// TODO: Boot fw, if we dont recieve an update request in 500ms 
+    uart_write_str(UART0, "Press B to run the firmware.\n");
 
+	// Not needed, but uart requres this var. Indicates that a response has beed read. In blocking function always true. 
     int resp;
+
     while (1) {
         uint32_t instruction = uart_read(UART0, BLOCKING, &resp);
 
@@ -100,62 +100,7 @@ int main(void) {
 			update_firmware();
 
         } else if (instruction == BOOT) {
-			metadata_blob *mb;
-            uart_write_str(UART0, "B");
-            uart_write_str(UART0, "Booting firmware...\n");
-
-			if (vault_addr->magic == VAULT_MAGIC) {
-				uart_write_str(UART0, "No corrupted vault :D\n");
-			}
-
-			uint8_t * m_addr;
-			switch (vault_addr->s) {
-				case STORAGE_TRUST_A:
-
-					// TODO: VERIFY FIRMWARE !!!
-
-					mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
-					uart_write_str(UART0, "I'm gonna boot from A :D\n");
-
-					// Write the message
-					m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
-					for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
-						uart_write(UART0, m_addr[i]);
-					}
-
-					SysCtlDelay(700000);
-					__asm("LDR R0,=0xe801\n\t"
-						  "BX R0\n\t");
-
-
-					// The code should never reach this point 
-					while(1);
-					
-
-					break;
-				case STORAGE_TRUST_B:
-					mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
-					uart_write_str(UART0, "I'm gonna boot from B :D\n");
-
-					// Write the message
-					m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
-					for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
-						uart_write(UART0, m_addr[i]);
-					}
-
-					SysCtlDelay(700000);
-					__asm("LDR R0,=0x27801\n\t"
-						  "BX R0\n\t");
-
-					break;
-
-				case STORAGE_TRUST_NONE:
-					uart_write_str(UART0, "Sorry, my mind is blank\n");
-					SysCtlReset();
-			}
-			while (1) {
-				//be lazy
-			}
+			boot_firmware();
         }
     }
 }
@@ -437,39 +382,116 @@ void update_firmware(void) {
 }
 
 
-// Implement this in the future
-void boot_firmware(void) {
-	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
-	while (1) {
+// // Implement this in the future
+// void boot_firmware(void) {
+// 	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
+// 	while (1) {
+// 	}
+//     __asm("LDR R0,=0x10001\n\t"
+//           "BX R0\n\t");
+// }
+
+
+void boot_firmware(){
+	metadata_blob *mb;
+	uart_write_str(UART0, "B");
+    uart_write_str(UART0, "Booting firmware...\n");
+
+	if (vault_addr->magic == VAULT_MAGIC) {
+		uart_write_str(UART0, "No corrupted vault :D\n");
 	}
-    __asm("LDR R0,=0x10001\n\t"
-          "BX R0\n\t");
+
+	uint8_t * m_addr;
+	switch (vault_addr->s) {
+		case STORAGE_TRUST_A:
+
+			// TODO: VERIFY FIRMWARE !!!
+
+			mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+			uart_write_str(UART0, "I'm gonna boot from A :D\n");
+
+			// Write the message
+			m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
+			for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
+				uart_write(UART0, m_addr[i]);
+			}
+
+			// 
+			SysCtlDelay(700000);
+			// _asm("LDR R0,=0xe801\n\t"
+			// "BX R0\n\t");
+
+			copy_fw_to_ram((uint32_t *)((STORAGE_PARTA + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
+			jump_to_fw(0x20000000, 0x20007FFF);
+
+
+			// The code should never reach this point 
+			while(1);
+					
+
+			break;
+		case STORAGE_TRUST_B:
+			mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+
+			// DELETE THE MESSAGE ||
+			uart_write_str(UART0, "I'm gonna boot from B :D\n");
+
+			// Write the message
+			m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
+			for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
+				uart_write(UART0, m_addr[i]);
+			}
+
+			SysCtlDelay(700000);
+
+			// DELETE THE MESSAGE ^^^
+
+			copy_fw_to_ram((uint32_t *)((STORAGE_PARTB + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
+			jump_to_fw(0x20000000, 0x20007FFF);
+
+
+			// __asm("LDR R0,=0x27801\n\t"
+			// 		"BX R0\n\t");
+
+			while(1);
+
+			break;
+
+		case STORAGE_TRUST_NONE:
+			uart_write_str(UART0, "No fw in installed, plese update\n");
+			SysCtlReset();
+	}
+
+	while (1);
 }
+
+
+
 
 
 // Inclomplete test functions
 
-void jump_to_fw(void) {
-    // Get the application's reset vector address
-    uint32_t fw_reset_vector = *(volatile uint32_t *)(RAM_START_ADDRESS + 4);
+void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
-    // Create a function pointer to the reset handler
-    pFunction fw_entry = (pFunction)app_reset_vector;
+	uint32_t fw_stack_pointer = sram_end;
+
+	// Get the application's reset vector address from the SRAM start address + 4 (after initial SP)
+    uint32_t fw_reset_vector = *(volatile uint32_t *)(sram_start + 4);
+
+	// Create a function pointer to the reset handler
+    pFunction fw_entry = (pFunction)fw_reset_vector;
 
     // Set the application's stack pointer
-    __set_MSP(*(volatile uint32_t *)RAM_START_ADDRESS);
+    __asm volatile ("msr msp, %0" :: "r" (fw_stack_pointer) : );
 
     // Jump to the application's reset handler
     fw_entry();
 }
 
 
-void CopyFlashToRAM(void) {
-    uint32_t *flash_ptr = (uint32_t *)FLASH_START_ADDRESS;
-    uint32_t *ram_ptr = (uint32_t *)RAM_START_ADDRESS;
-    for (uint32_t i = 0; i < (APPLICATION_SIZE / sizeof(uint32_t)); i++) {
-        ram_ptr[i] = flash_ptr[i];
-    }
+void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size) {
+	//TODO: should also decrypt
+	memcpy(sram_ptr, fw_ptr, fw_size);
 }
 
 // verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct

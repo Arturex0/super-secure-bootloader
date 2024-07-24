@@ -176,10 +176,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.port == None:
-        serial.Serial("/dev/ttyACM0", 115200)
+        ser = serial.Serial("/dev/ttyACM0", 115200)
     else:
 
-        serial.Serial(args.port, 115200)
+        ser = serial.Serial(args.port, 115200)
 
     update(ser=ser, infile=args.firmware, debug=args.debug)
     ser.close()

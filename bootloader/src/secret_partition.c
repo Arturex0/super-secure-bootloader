@@ -68,6 +68,7 @@ void setup_secrets(void) {
 			result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
 		}
 		
+		//Reboot
 		SysCtlReset();
 		//counter to test write
 
