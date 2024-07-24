@@ -9,6 +9,7 @@ import os
 from pwn import *
 from Crypto.Hash import HMAC, SHA256
 from Crypto.Util.Padding import pad, unpad
+from Crypto.Cipher import AES
 import struct
 
 DEFAULT_SECRETS="./secret_build_output.txt"
@@ -24,7 +25,7 @@ def protect_firmware(infile, outfile, version, message, secrets):
 
     with open(secrets, 'r') as f:
         vault_key = bytes.fromhex(f.readline())
-        decrypt_key = bytes.fromhex(f.readline())
+        encrypt_key = bytes.fromhex(f.readline())
         hmac_key = bytes.fromhex(f.readline())
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
@@ -37,18 +38,23 @@ def protect_firmware(infile, outfile, version, message, secrets):
     # don't use the padded firmware length use normal length
     metadata = p32(version, endian='little') + p32(len(firmware), endian='little') + \
                p32(len(m), endian='little') + p32(0, endian='little')
-    print(metadata)
 
     hmac_obj.update(metadata)
     metadata_hmac = hmac_obj.digest()
 
-    hmac_obj.update(metadata_hmac + m_pad + firmware_padded)
+    #iv = os.urandom(16)
+    to_encrypt = metadata + metadata_hmac + m_pad + firmware_padded
+    cipher = AES.new(encrypt_key, AES.MODE_CTR)
+    iv = cipher.nonce + b'\x00' * 8
+    print(iv)
 
+    encrypted_blob = cipher.encrypt(to_encrypt)
+    hmac_obj = HMAC.new(hmac_key, digestmod=SHA256) 
+    hmac_obj.update(encrypted_blob)
     signature = hmac_obj.digest()
-    iv = os.urandom(16)
 
     #signature gets sent in at the end in seperate block
-    firmware_blob = signature + iv + metadata + metadata_hmac + m_pad + firmware_padded
+    firmware_blob = signature + iv + encrypted_blob
 
 
     # Write firmware blob to outfile
