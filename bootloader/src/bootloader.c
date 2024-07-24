@@ -240,7 +240,6 @@ void update_firmware(void) {
 	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
 	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
 	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
-	uart_write_hex(UART0, new_mb->metadata.fw_version);
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 	// FLOW CHART: metadata signature good?
@@ -259,7 +258,6 @@ void update_firmware(void) {
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 			old_version = old_mb->metadata.fw_version;
-			old_version = 1;
 			break;
 		// Write to partition A, read old metadata from partition B
 		case STORAGE_TRUST_B:
@@ -269,7 +267,6 @@ void update_firmware(void) {
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 			old_version = old_mb->metadata.fw_version;
-			old_version = 1;
 			break;
 		// By default write to A, firmware version is always 1	
 		case STORAGE_TRUST_NONE:
@@ -288,7 +285,7 @@ void update_firmware(void) {
 
 	// FLOW CHART: Metadata version good?
 	if (new_mb->metadata.fw_version < old_version) {
-		uart_write_str(UART0, "wtf devolving\n");
+		uart_write_str(UART0, "It is evolving, just backwards\n");
 		SysCtlReset();
 	}
 
