@@ -108,7 +108,7 @@ void update_firmware(void) {
 	int result = 0;
 	uint32_t size; 						// frame size read in
 
-	uint32_t old_version ;			 	// version of current firmware
+	uint32_t old_version;			 	// version of current firmware
 
 	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
 	uint32_t flash_block_offset = 0; 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
@@ -181,6 +181,7 @@ void update_firmware(void) {
 
 	// Read into vault
 	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+	old_version = vault.fw_version;
 
 	// Debug version should not reset 
 	if (new_mb->metadata.fw_version != 0) {
