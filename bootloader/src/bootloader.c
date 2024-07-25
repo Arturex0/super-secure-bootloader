@@ -47,7 +47,6 @@ typedef void (*pFunction)(void);
 //crypto state
 
 // FLOW CHART: Initialize import state
-vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
 secrets_struct secrets;
 uint8_t ct_buffer[READ_BUFFER_SIZE];
 uint8_t pt_buffer[READ_BUFFER_SIZE];
@@ -132,7 +131,8 @@ void load_firmware(void) {
 }
 void update_firmware(void) {
 
-	// ========== Funny metadata shenanigans =========
+	// EEPROM/flash results
+	int result = 0;
 	uint32_t size; 						// frame size read in
 	uint32_t old_version; 				// version of current firmware
 	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
@@ -141,9 +141,6 @@ void update_firmware(void) {
 										// pointers to newly received metadata block and old metadata blocks
 	metadata_blob *old_mb;
 	metadata_blob *new_mb;
-	enum STORAGE_PART_STATUS \
-		new_permissions = \
-		STORAGE_TRUST_NONE;  			// partition to change trust to
 
 	uint32_t addr; 						// for calculating flash offsets
 
@@ -154,6 +151,7 @@ void update_firmware(void) {
 	Hmac hmac;
 	Aes aes;
 
+	vault_struct vault;
 	uart_write_str(UART0, "U");
 
 	// setup hmac
@@ -193,10 +191,9 @@ void update_firmware(void) {
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
 	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
-	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
-	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
+
 	// FLOW CHART: metadata signature good?
 	if (!passed) {
 		uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
@@ -204,11 +201,16 @@ void update_firmware(void) {
 	}
 	uart_write_str(UART0, "you're did it\n");
 
-	switch (vault_addr->s) {
+	// Read into vault
+	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+
+	switch (vault.s) {
 		// Write to partition B, read old metadata from partition A
 		case STORAGE_TRUST_A:
 			start_block = STORAGE_PARTB;
-			new_permissions = STORAGE_TRUST_B;
+			//new_permissions = STORAGE_TRUST_B;
+			vault.s = STORAGE_TRUST_B;
+
 			uart_write_str(UART0, "Trust a\n");
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
@@ -217,7 +219,8 @@ void update_firmware(void) {
 		// Write to partition A, read old metadata from partition B
 		case STORAGE_TRUST_B:
 			start_block = STORAGE_PARTA;
-			new_permissions = STORAGE_TRUST_A;
+			//new_permissions = STORAGE_TRUST_A;
+			vault.s = STORAGE_TRUST_A;
 			uart_write_str(UART0, "Trust b\n");
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
@@ -226,7 +229,8 @@ void update_firmware(void) {
 		// By default write to A, firmware version is always 1	
 		case STORAGE_TRUST_NONE:
 			start_block = STORAGE_PARTA;
-			new_permissions = STORAGE_TRUST_A;
+			//new_permissions = STORAGE_TRUST_A;
+			vault.s = STORAGE_TRUST_A;
 			old_version = 1;
 			uart_write_str(UART0, "Trust no one\n");
 	}
@@ -360,20 +364,12 @@ void update_firmware(void) {
 	addr = (start_block + flash_block_offset) << 10;
 	program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
 
-	vault_struct new_vault = {
-		VAULT_MAGIC,
-		new_permissions
-	};
-
-	// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
-	if (sizeof(new_vault) % 4) {
-		uart_write_str(UART0, "oops messed up struct alignment\n");
-		SysCtlReset();
+	// Store new vault
+	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+	if (result != 0) {
+		result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
 	}
 
-	if (program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault))) {
-		uart_write_str(UART0, "Can't program flash :thonk:\n");
-	}
 
 	uart_write_str(UART0, "A");
 	// can shorten this but it needs to not be so short that the string isn't written
@@ -381,28 +377,20 @@ void update_firmware(void) {
 	SysCtlReset();
 }
 
-
-// // Implement this in the future
-// void boot_firmware(void) {
-// 	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
-// 	while (1) {
-// 	}
-//     __asm("LDR R0,=0x10001\n\t"
-//           "BX R0\n\t");
-// }
-
-
 void boot_firmware(){
 	metadata_blob *mb;
 	uart_write_str(UART0, "B");
     uart_write_str(UART0, "Booting firmware...\n");
+	vault_struct vault;
 
-	if (vault_addr->magic == VAULT_MAGIC) {
+	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+
+	if (vault.magic == VAULT_MAGIC) {
 		uart_write_str(UART0, "No corrupted vault :D\n");
 	}
 
 	uint8_t * m_addr;
-	switch (vault_addr->s) {
+	switch (vault.s) {
 		case STORAGE_TRUST_A:
 
 			// TODO: VERIFY FIRMWARE !!!
@@ -449,10 +437,6 @@ void boot_firmware(){
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTB + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
 			jump_to_fw(0x20000001, 0x20007FF0);
 
-
-			// __asm("LDR R0,=0x27801\n\t"
-			// 		"BX R0\n\t");
-
 			while(1);
 
 			break;
@@ -465,17 +449,11 @@ void boot_firmware(){
 	while (1);
 }
 
-
-
-
-
-// Inclomplete test functions
-
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
 	uint32_t fw_stack_pointer = sram_end;
 
-	// Get the application's reset vector address from the SRAM start address + 4 (after initial SP)
+	// Get the application's reset vector address from the SRAM start address (after initial SP)
     uint32_t fw_reset_vector = (volatile uint32_t)(sram_start);
 
 	// Create a function pointer to the reset handler
@@ -533,10 +511,4 @@ bool verify_checksum(uint16_t given_checksum, int data[]){
 		return true;
 	}
 	return false;
-
-
-
-
-
-
 }
