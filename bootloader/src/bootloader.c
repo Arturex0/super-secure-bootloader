@@ -181,7 +181,12 @@ void update_firmware(void) {
 	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
 
 	old_version = vault.fw_version;
-	vault.fw_version = new_mb->metadata.fw_version;
+
+	// Debug version should not reset 
+	if (new_mb->metadata.fw_version != 0) {
+		vault.fw_version = new_mb->metadata.fw_version;
+	}
+
 	vault.fw_length = new_mb->metadata.fw_length;
 	vault.message_len = new_mb->metadata.message_length;
 
@@ -218,7 +223,6 @@ void update_firmware(void) {
 	}
 
 	// FLOW CHART: Metadata version good?
-	uart_write_hex(UART0, old_version);
 	if (new_mb->metadata.fw_version < old_version) {
 		uart_write_str(UART0, "It is evolving, just backwards\n");
 		SysCtlReset();
@@ -352,7 +356,6 @@ void update_firmware(void) {
 
 	uart_write_str(UART0, "A");
 	// can shorten this but it needs to not be so short that the string isn't written
-	// SysCtlDelay(700000);
 
 	// wait for UART to finish
 	while (UARTBusy(UART0_BASE)) {};
@@ -436,8 +439,6 @@ void boot_firmware(){
 		SysCtlReset();
     }
 
-	uart_write_str(UART0, "good aes initialization\n");
-
      // Set AES decryption key + IV
 	// Direction for some modes (CFB and CTR) is always AES_ENCRYPTION.
     if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_ENCRYPTION)) {
@@ -472,18 +473,12 @@ void boot_firmware(){
 	}
 
 	// Finish UART operations
-	uart_write_str(UART0, "GOOD\n");
 	while(UARTBusy(UART0_BASE)){}
 
 	// VERY DANGEROUS
 	// Do not use globals after this function is called
 	copy_fw_to_ram((uint32_t *) addr, \
 			(uint32_t *) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
-
-	//These may use globals
-	
-	//uart_write_str(UART0, "good ram copy\n");
-	//SysCtlDelay(700000);
 	
 	jump_to_fw(0x20000001, 0x20007FF0);
 
