@@ -23,5 +23,8 @@ enum STORAGE_PART_STATUS {
 typedef struct vault_struct {
 	uint32_t magic;
 	enum STORAGE_PART_STATUS s;
+	uint32_t fw_version;
+	uint32_t fw_length;
+	uint32_t message_len;
 } vault_struct;
 #endif
