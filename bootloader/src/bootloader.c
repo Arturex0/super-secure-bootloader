@@ -18,6 +18,10 @@
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
 
 #include "driverlib/eeprom.h"	 // EEPROM API
+
+#define DPART_TM4C123GH6PM
+#define DTARGET_IS_TM4C123_RB1
+#define TARGET_IS_BLIZZARD_RB1
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
 
@@ -41,6 +45,7 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 void setup_vault(void);
+bool verify_checksum(uint16_t given_checksum, uint32_t * data);
 
 typedef void (*pFunction)(void);
 
@@ -522,11 +527,11 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 	return ret;
 }
 
-// Takes in data and proposed checksum and returns bool of verification
-bool verify_checksum(uint16_t given_checksum, int data[]){
+// Takes in proposed checksum and data returns bool of verification
+bool verify_checksum(uint16_t given_checksum, uint32_t * data){
 
 	// length of the array of data in words 1024 buffer/32 bit word = 32, and array
-	uint16_t checksum = 0; // ROM_Crc16Array(32, data); keeps throwing warning but I included rom.h and rom_map.h
+	uint16_t checksum = ROM_Crc16Array(32, data); 
 
 	if(checksum == given_checksum){
 
