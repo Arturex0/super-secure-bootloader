@@ -54,7 +54,7 @@ def calc_checksum(data):
             else:
                 crc >>= 1
 
-    return crc & 0xFFFF
+    return p16(crc & 0xFFFF, endian="little")
 
 def wait_confirmation(response):
     print("Waiting for bootloader response....")
@@ -108,21 +108,25 @@ def send_firmware(firmware, signature):
     for i in range(full_blocks):
         if DEBUG:
             print("Writing firmware frame!")
-        checksum = calc_checksum(firmware)
+        firmware_chunk = firmware[i * 1024: (i + 1) * 1024]
+        checksum = calc_checksum(firmware_chunk) # checksum is of only the firmware chunk
         ser.write(SEND_FRAME)
         size = p16(1024, endian="little")
-        ser.write(size + firmware[i * 1024: (i + 1) * 1024] + checksum)
+        ser.write(size + firmware_chunk + checksum)  
         wait_confirmation(RESP_OK)
     if extra:
         print("Writing partial frame!")
         ser.write(SEND_FRAME)
         size = p16(extra)
-        ser.write(size + firmware[full_blocks * 1024:] + checksum)
+        firmware_chunk = firmware[full_blocks * 1024:]
+        checksum = calc_checksum(firmware_chunk)
+        ser.write(size + firmware_chunk + checksum)
         wait_confirmation(RESP_OK)
     
 
     print("Sending in signature please pray for me")
     ser.write(SEND_FRAME)
+
     ser.write(p16(0) + signature)
     wait_confirmation(RESP_OK)
 

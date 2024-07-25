@@ -302,6 +302,18 @@ void update_firmware(void) {
 			ending = true;
 		}
 
+		uint8_t sent_checksum[2];
+		sent_checksum[0] = pt_buffer[1022];
+		sent_checksum[1] = pt_buffer[1023];
+
+		if (verify_checksum(sent_checksum, pt_buffer)){
+			uart_write_str(UART0, "Checksum did not checkout");
+			SysCtlReset();
+
+		}
+
+		uart_write_str(UART0, "CHECKSUM CHECKED ;)");
+
 		// is this size a multiple of AES/other function block size (16)?
 		// ensuring this just makes decryption easier :D
 		if (size % SECRETS_ENCRYPTION_BLOCK_LENGTH) {
@@ -323,16 +335,6 @@ void update_firmware(void) {
 			SysCtlReset();
 		}
 
-		uint8_t sent_checksum[2];
-		sent_checksum[0] = pt_buffer[1022];
-		sent_checksum[1] = pt_buffer[1023];
-
-		if (verify_checksum(sent_checksum, pt_buffer)){
-			uart_write_str(UART0, "Checksum did not checkout");
-			SysCtlReset();
-
-		}
-		uart_write_str(UART0, "CHECKSUM CHECKED ;)");
 		// Write to flash
 		program_flash((void *) addr, pt_buffer, size);
 
@@ -542,7 +544,6 @@ bool verify_checksum(uint8_t given_checksum[2], uint8_t data[1022]){
 
 	uint32_t block_len = 1022;
 	uint16_t checksum = ROM_Crc16(0, data, block_len); 
-
 	uint16_t given = (given_checksum[0] << 8) | given_checksum[1];
 
 	if(checksum == given){
@@ -550,10 +551,4 @@ bool verify_checksum(uint8_t given_checksum[2], uint8_t data[1022]){
 		return true;
 	}
 	return false;
-
-
-
-
-
-
 }
