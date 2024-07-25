@@ -45,7 +45,7 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 void setup_vault(void);
-bool verify_checksum(uint16_t given_checksum, uint32_t * data);
+bool verify_checksum(uint8_t given_checksum[2], uint8_t data[1022]);
 
 typedef void (*pFunction)(void);
 
@@ -323,6 +323,16 @@ void update_firmware(void) {
 			SysCtlReset();
 		}
 
+		uint8_t sent_checksum[2];
+		sent_checksum[0] = pt_buffer[1022];
+		sent_checksum[1] = pt_buffer[1023];
+
+		if (verify_checksum(sent_checksum, pt_buffer)){
+			uart_write_str(UART0, "Checksum did not checkout");
+			SysCtlReset();
+
+		}
+		uart_write_str(UART0, "CHECKSUM CHECKED ;)");
 		// Write to flash
 		program_flash((void *) addr, pt_buffer, size);
 
@@ -528,12 +538,14 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 }
 
 // Takes in proposed checksum and data returns bool of verification
-bool verify_checksum(uint16_t given_checksum, uint32_t * data){
+bool verify_checksum(uint8_t given_checksum[2], uint8_t data[1022]){
 
-	// length of the array of data in words 1024 buffer/32 bit word = 32, and array
-	uint16_t checksum = ROM_Crc16Array(32, data); 
+	uint32_t block_len = 1022;
+	uint16_t checksum = ROM_Crc16(0, data, block_len); 
 
-	if(checksum == given_checksum){
+	uint16_t given = (given_checksum[0] << 8) | given_checksum[1];
+
+	if(checksum == given){
 
 		return true;
 	}
