@@ -20,9 +20,9 @@
 #include "driverlib/eeprom.h"	 // EEPROM API
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
+#include "driverlib/uart.h"
 
 // Application Imports
-#include "driverlib/gpio.h"
 #include "uart/uart.h"
 
 // Cryptography Imports
@@ -73,8 +73,6 @@ int main(void) {
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
 
 	// TODO: Should only read vault decryption keays. Other keys are not needed rn 
-	// Funny crypto shenanigans
-	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
 	// TODO: Boot fw, if we dont recieve an update request in 500ms 
@@ -351,7 +349,10 @@ void update_firmware(void) {
 
 	uart_write_str(UART0, "A");
 	// can shorten this but it needs to not be so short that the string isn't written
-	SysCtlDelay(700000);
+	// SysCtlDelay(700000);
+
+	// wait for UART to finish
+	while (UARTBusy(UART0_BASE)) {};
 	SysCtlReset();
 }
 
@@ -392,10 +393,7 @@ void boot_firmware(){
 				uart_write(UART0, m_addr[i]);
 			}
 
-			// 
-			SysCtlDelay(700000);
-			// _asm("LDR R0,=0xe801\n\t"
-			// "BX R0\n\t");
+			while (UARTBusy(UART0_BASE)) {};
 
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTA + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
 			jump_to_fw(0x20000001, 0x20007FF0);
