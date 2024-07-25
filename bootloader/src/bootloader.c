@@ -312,14 +312,14 @@ void update_firmware(void) {
 		addr = (start_block + flash_block_offset) << 10;
 		flash_block_offset++;
 
-		//decrypt block
-		if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, size)) {
-			uart_write_str(UART0, "idk how to do the crypto stuff all the cool kids are talking about\n");
-			SysCtlReset();
-		}
+		// //decrypt block
+		// if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, size)) {
+		// 	uart_write_str(UART0, "idk how to do the crypto stuff all the cool kids are talking about\n");
+		// 	SysCtlReset();
+		// }
 
 		// Write to flash
-		program_flash((void *) addr, pt_buffer, size);
+		program_flash((void *) addr, ct_buffer, size);
 
 		// Update hash function (this is the cipher text, not the plaintext)
 		if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
@@ -393,7 +393,14 @@ void update_firmware(void) {
 
 
 void boot_firmware(){
+
+
 	metadata_blob *mb;
+	uint8_t *m_addr;
+    uint32_t addr;
+
+
+
 	uart_write_str(UART0, "B");
     uart_write_str(UART0, "Booting firmware...\n");
 
@@ -401,7 +408,6 @@ void boot_firmware(){
 		uart_write_str(UART0, "No corrupted vault :D\n");
 	}
 
-	uint8_t * m_addr;
 	switch (vault_addr->s) {
 		case STORAGE_TRUST_A:
 
@@ -410,57 +416,52 @@ void boot_firmware(){
 			mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 			uart_write_str(UART0, "I'm gonna boot from A :D\n");
 
-			// Write the message
+			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
-			for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
-				uart_write(UART0, m_addr[i]);
-			}
-
-			// 
-			SysCtlDelay(700000);
-			// _asm("LDR R0,=0xe801\n\t"
-			// "BX R0\n\t");
-
-			copy_fw_to_ram((uint32_t *)((STORAGE_PARTA + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
-			jump_to_fw(0x20000001, 0x20007FF0);
-
-
-			// The code should never reach this point 
-			while(1);
-					
-
+			//Calculate the fw address
+			addr = (STORAGE_PARTA + 2) << 10;
 			break;
+
 		case STORAGE_TRUST_B:
 			mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 
 			// DELETE THE MESSAGE ||
 			uart_write_str(UART0, "I'm gonna boot from B :D\n");
 
-			// Write the message
+			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
-			for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
-				uart_write(UART0, m_addr[i]);
-			}
-
-			SysCtlDelay(700000);
-
-			// DELETE THE MESSAGE ^^^
-
-			copy_fw_to_ram((uint32_t *)((STORAGE_PARTB + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
-			jump_to_fw(0x20000001, 0x20007FF0);
-
-
-			// __asm("LDR R0,=0x27801\n\t"
-			// 		"BX R0\n\t");
-
-			while(1);
-
+			//Calculate the fw address
+			addr = (STORAGE_PARTB + 2) << 10;
 			break;
 
 		case STORAGE_TRUST_NONE:
 			uart_write_str(UART0, "No fw in installed, plese update\n");
 			SysCtlReset();
+			return;
+
+		default:
+            uart_write_str(UART0, "Unknown trust state\n");
+            SysCtlReset();
+            return;
 	}
+
+
+	//Copy if from metadata 
+    memcpy(iv, mb->iv, SECRETS_IV_LEN);
+
+	// // Optionally write the message
+    // for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
+    //     uart_write(UART0, m_addr[i]);
+    // }
+
+	SysCtlDelay(700000);
+
+	copy_fw_to_ram((uint32_t *) addr, (uint32_t *) 0x20000000, mb->metadata.fw_length);
+
+	uart_write_str(UART0, "good ram copy\n");
+	SysCtlDelay(700000);
+	
+	jump_to_fw(0x20000001, 0x20007FF0);
 
 	while (1);
 }
@@ -469,13 +470,12 @@ void boot_firmware(){
 
 
 
-// Inclomplete test functions
 
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
 	uint32_t fw_stack_pointer = sram_end;
 
-	// Get the application's reset vector address from the SRAM start address + 4 (after initial SP)
+	// Get the application's reset vector address from the SRAM start address
     uint32_t fw_reset_vector = (volatile uint32_t)(sram_start);
 
 	// Create a function pointer to the reset handler
@@ -490,9 +490,64 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
 
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size) {
-	//TODO: should also decrypt
-	memcpy(sram_ptr, fw_ptr, fw_size);
+    Aes aes;
+
+    // Buffer to hold the encrypted data
+    uint8_t ct_buffer[READ_BUFFER_SIZE];
+    // Buffer to hold the decrypted data
+    uint8_t pt_buffer[READ_BUFFER_SIZE];
+
+    // Initialize AES context (key should be set appropriately)
+   // Initialize AES for decryption
+    if (wc_AesInit(&aes, NULL, INVALID_DEVID)) {
+        uart_write_str(UART0, "FATAL aes initialization error\n");
+        SysCtlReset();
+    }
+
+	uart_write_str(UART0, "good aes initialization\n");
+	SysCtlDelay(700000);
+
+
+     // Set AES decryption key
+    if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_DECRYPTION)) {
+        uart_write_str(UART0, "FATAL aes key setup error\n");
+        SysCtlReset();
+    }
+
+	uart_write_str(UART0, "good aes key setup\n");
+	SysCtlDelay(700000);
+
+    while (fw_size > 0) {
+        uint32_t block_size = fw_size > SECRETS_ENCRYPTION_BLOCK_LENGTH ? SECRETS_ENCRYPTION_BLOCK_LENGTH : fw_size;
+
+        // Copy encrypted data from flash to ct_buffer
+        memcpy(ct_buffer, fw_ptr, block_size);
+
+        // // Decrypt the data
+        // wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, block_size);
+
+		// Decrypt the data
+        if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, block_size)) {
+            uart_write_str(UART0, "Decryption error\n");
+            SysCtlReset();
+        }
+
+        // Copy decrypted data to SRAM
+        memcpy(sram_ptr, pt_buffer, block_size);
+
+        // Update pointers and remaining size
+        fw_ptr += block_size / sizeof(uint32_t);
+        sram_ptr += block_size / sizeof(uint32_t);
+        fw_size -= block_size;
+    }
+
+    // Clean up AES context
+    wc_AesFree(&aes);
+
+	// memcpy(sram_ptr, fw_ptr, fw_size);
 }
+
+
 
 // verifies an hmac, given the data, key and hash to test against, returns boolean True if verification correct
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash){
