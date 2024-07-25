@@ -20,9 +20,9 @@
 #include "driverlib/eeprom.h"	 // EEPROM API
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
+#include "driverlib/uart.h"
 
 // Application Imports
-#include "driverlib/gpio.h"
 #include "uart/uart.h"
 
 // Cryptography Imports
@@ -33,27 +33,18 @@
 #include "wolfssl/wolfcrypt/hmac.h"
 
 // Forward Declarations
-void load_firmware(void);
 void update_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
-void setup_vault(void);
 
 typedef void (*pFunction)(void);
 
 //crypto state
 
 // FLOW CHART: Initialize import state
-vault_struct *vault_addr = (vault_struct *) (VAULT_BLOCK << 10);
-secrets_struct secrets;
-uint8_t ct_buffer[READ_BUFFER_SIZE];
-uint8_t pt_buffer[READ_BUFFER_SIZE];
-
-// FLOW CHART: Allocate space for IV + encrypted data + decrypted data
-uint8_t iv[SECRETS_IV_LEN];
 
 int main(void) {
 	uint32_t eeprom_status;
@@ -82,9 +73,6 @@ int main(void) {
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
 
 	// TODO: Should only read vault decryption keays. Other keys are not needed rn 
-	// Funny crypto shenanigans
-	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
-	
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
 	// TODO: Boot fw, if we dont recieve an update request in 500ms 
@@ -105,45 +93,25 @@ int main(void) {
     }
 }
 
- /*
- * Load the firmware into flash.
- */
-void load_firmware(void) {
-    int read = 0;
-    uint32_t rcv = 0;
-
-    uint32_t version = 0;
-    uint32_t size = 0;
-
-    // Get version.
-    rcv = uart_read(UART0, BLOCKING, &read);
-    version = (uint32_t)rcv;
-    rcv = uart_read(UART0, BLOCKING, &read);
-    version |= (uint32_t)rcv << 8;
-
-    // Get size.
-    rcv = uart_read(UART0, BLOCKING, &read);
-    size = (uint32_t)rcv;
-    rcv = uart_read(UART0, BLOCKING, &read);
-    size |= (uint32_t)rcv << 8;
-
-    // Compare to old version and abort if older (note special case for version 0).
-    // If no metadata available (0xFFFF), accept version 1
-}
 void update_firmware(void) {
 
-	// ========== Funny metadata shenanigans =========
+	secrets_struct secrets;
+	uint8_t ct_buffer[READ_BUFFER_SIZE];
+	uint8_t pt_buffer[READ_BUFFER_SIZE];
+
+	// FLOW CHART: Allocate space for IV + encrypted data + decrypted data
+	uint8_t iv[SECRETS_IV_LEN];
+
+	// EEPROM/flash results
+	int result = 0;
 	uint32_t size; 						// frame size read in
-	uint32_t old_version; 				// version of current firmware
+	uint32_t old_version = 0xffffffff; 	// version of current firmware
 	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
 	uint32_t flash_block_offset = 0; 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
 
 										// pointers to newly received metadata block and old metadata blocks
 	metadata_blob *old_mb;
 	metadata_blob *new_mb;
-	enum STORAGE_PART_STATUS \
-		new_permissions = \
-		STORAGE_TRUST_NONE;  			// partition to change trust to
 
 	uint32_t addr; 						// for calculating flash offsets
 
@@ -154,7 +122,12 @@ void update_firmware(void) {
 	Hmac hmac;
 	Aes aes;
 
+	vault_struct vault;
 	uart_write_str(UART0, "U");
+
+	// Read secrets from EEPROM and hide block, preventing further access
+	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
+	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 
 	// setup hmac
 	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
@@ -193,10 +166,9 @@ void update_firmware(void) {
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
 	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
-	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata));
-	//wc_HmacUpdate(&hmac, (uint8_t *) &new_mb->hmac, sizeof(new_mb->hmac));
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
+
 	// FLOW CHART: metadata signature good?
 	if (!passed) {
 		uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
@@ -204,11 +176,16 @@ void update_firmware(void) {
 	}
 	uart_write_str(UART0, "you're did it\n");
 
-	switch (vault_addr->s) {
+	// Read into vault
+	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+
+	switch (vault.s) {
 		// Write to partition B, read old metadata from partition A
 		case STORAGE_TRUST_A:
 			start_block = STORAGE_PARTB;
-			new_permissions = STORAGE_TRUST_B;
+			//new_permissions = STORAGE_TRUST_B;
+			vault.s = STORAGE_TRUST_B;
+
 			uart_write_str(UART0, "Trust a\n");
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
@@ -217,7 +194,8 @@ void update_firmware(void) {
 		// Write to partition A, read old metadata from partition B
 		case STORAGE_TRUST_B:
 			start_block = STORAGE_PARTA;
-			new_permissions = STORAGE_TRUST_A;
+			//new_permissions = STORAGE_TRUST_A;
+			vault.s = STORAGE_TRUST_A;
 			uart_write_str(UART0, "Trust b\n");
 
 			old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
@@ -226,7 +204,8 @@ void update_firmware(void) {
 		// By default write to A, firmware version is always 1	
 		case STORAGE_TRUST_NONE:
 			start_block = STORAGE_PARTA;
-			new_permissions = STORAGE_TRUST_A;
+			//new_permissions = STORAGE_TRUST_A;
+			vault.s = STORAGE_TRUST_A;
 			old_version = 1;
 			uart_write_str(UART0, "Trust no one\n");
 	}
@@ -262,6 +241,7 @@ void update_firmware(void) {
 		uart_write_str(UART0, "couldn't erase flash :sob:\n");
 		SysCtlReset();
 	}
+
 	addr = addr + FLASH_PAGESIZE - sizeof(metadata_blob);
 	if (FlashProgram((uint32_t *) new_mb, addr, sizeof(metadata_blob))) {
 
@@ -360,49 +340,46 @@ void update_firmware(void) {
 	addr = (start_block + flash_block_offset) << 10;
 	program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
 
-	vault_struct new_vault = {
-		VAULT_MAGIC,
-		new_permissions
-	};
-
-	// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
-	if (sizeof(new_vault) % 4) {
-		uart_write_str(UART0, "oops messed up struct alignment\n");
-		SysCtlReset();
+	// Store new vault
+	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+	if (result != 0) {
+		result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
 	}
 
-	if (program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &new_vault, sizeof(new_vault))) {
-		uart_write_str(UART0, "Can't program flash :thonk:\n");
-	}
 
 	uart_write_str(UART0, "A");
 	// can shorten this but it needs to not be so short that the string isn't written
-	SysCtlDelay(700000);
+	// SysCtlDelay(700000);
+
+	// wait for UART to finish
+	while (UARTBusy(UART0_BASE)) {};
 	SysCtlReset();
 }
 
-
-// // Implement this in the future
-// void boot_firmware(void) {
-// 	uart_write_str(UART0, "oopsie I forgot how to run code :(\n");
-// 	while (1) {
-// 	}
-//     __asm("LDR R0,=0x10001\n\t"
-//           "BX R0\n\t");
-// }
-
-
 void boot_firmware(){
+
+	// Values needed for decryption
+	secrets_struct secrets;
+	uint8_t iv[SECRETS_IV_LEN];
+
 	metadata_blob *mb;
 	uart_write_str(UART0, "B");
     uart_write_str(UART0, "Booting firmware...\n");
+	vault_struct vault;
 
-	if (vault_addr->magic == VAULT_MAGIC) {
+	// Read vault status
+	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+
+	// Read secrets from EEPROM and hide block, preventing further access
+	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
+	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
+
+	if (vault.magic == VAULT_MAGIC) {
 		uart_write_str(UART0, "No corrupted vault :D\n");
 	}
 
 	uint8_t * m_addr;
-	switch (vault_addr->s) {
+	switch (vault.s) {
 		case STORAGE_TRUST_A:
 
 			// TODO: VERIFY FIRMWARE !!!
@@ -416,10 +393,7 @@ void boot_firmware(){
 				uart_write(UART0, m_addr[i]);
 			}
 
-			// 
-			SysCtlDelay(700000);
-			// _asm("LDR R0,=0xe801\n\t"
-			// "BX R0\n\t");
+			while (UARTBusy(UART0_BASE)) {};
 
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTA + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
 			jump_to_fw(0x20000001, 0x20007FF0);
@@ -449,10 +423,6 @@ void boot_firmware(){
 			copy_fw_to_ram((uint32_t *)((STORAGE_PARTB + 2) << 10), (uint32_t *)0x20000000, mb->metadata.fw_length);
 			jump_to_fw(0x20000001, 0x20007FF0);
 
-
-			// __asm("LDR R0,=0x27801\n\t"
-			// 		"BX R0\n\t");
-
 			while(1);
 
 			break;
@@ -465,17 +435,11 @@ void boot_firmware(){
 	while (1);
 }
 
-
-
-
-
-// Inclomplete test functions
-
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
 	uint32_t fw_stack_pointer = sram_end;
 
-	// Get the application's reset vector address from the SRAM start address + 4 (after initial SP)
+	// Get the application's reset vector address from the SRAM start address (after initial SP)
     uint32_t fw_reset_vector = (volatile uint32_t)(sram_start);
 
 	// Create a function pointer to the reset handler
@@ -533,10 +497,4 @@ bool verify_checksum(uint16_t given_checksum, int data[]){
 		return true;
 	}
 	return false;
-
-
-
-
-
-
 }
