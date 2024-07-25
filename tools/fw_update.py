@@ -93,7 +93,7 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     ser.write(SEND_FRAME)
 
     size = p16(64, endian="little") 
-    ser.write(size + IV + metadata + metadata_hmac)
+    ser.write(size + IV + metadata + metadata_hmac) # last bits to take place of check
 
     # Wait for an OK from the bootloader.
     wait_confirmation(RESP_OK)

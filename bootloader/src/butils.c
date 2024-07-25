@@ -69,8 +69,9 @@ uint16_t read_short(void) {
 
 // Reads in at most READ_BUFFER_SIZE bytes into buffer 
 // This function does not perform error checking if block size is zero
-uint32_t read_frame(uint8_t * buffer) {
-	//TODO: Comute checksum and verify (Wait for acknowledge)
+uint16_t meta[2];
+uint16_t* read_frame(uint8_t * buffer) {
+	
 	
 	int read = 0;
 	
@@ -83,7 +84,9 @@ uint32_t read_frame(uint8_t * buffer) {
 	uint16_t data_size;
 	data_size = read_short();
 	if (data_size == 0) {
-		return data_size;
+        meta[0] = 0;
+        meta[1] = 0;
+		return meta;
 	}
 	if (data_size > READ_BUFFER_SIZE) {
 		uart_write_str(UART0, "Frame size too big!\n");
@@ -93,11 +96,17 @@ uint32_t read_frame(uint8_t * buffer) {
 		buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
 
+    uint16_t checksum = read_short();
+    
+    meta[0] = data_size;
+    meta[1] = checksum;
+
+
 	// Do not write acknowledge in this function, instead it is up to the caller to run logic and acknowledge the frame \
 	// Only write a restart here if frame is corrupted
 	
 	//uart_write_str(UART0, "A");
-	return data_size;
+	return meta;
 
 	//resend, checksum failed
 	//uart_write_str(UART0, "R");
