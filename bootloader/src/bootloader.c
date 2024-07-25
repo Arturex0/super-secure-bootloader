@@ -107,7 +107,9 @@ void update_firmware(void) {
 	// EEPROM/flash results
 	int result = 0;
 	uint32_t size; 						// frame size read in
+
 	uint32_t old_version ;			 	// version of current firmware
+
 	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
 	uint32_t flash_block_offset = 0; 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
 
@@ -180,8 +182,6 @@ void update_firmware(void) {
 	// Read into vault
 	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
 
-	old_version = vault.fw_version;
-
 	// Debug version should not reset 
 	if (new_mb->metadata.fw_version != 0) {
 		vault.fw_version = new_mb->metadata.fw_version;
@@ -213,6 +213,7 @@ void update_firmware(void) {
 			start_block = STORAGE_PARTA;
 			//new_permissions = STORAGE_TRUST_A;
 			vault.s = STORAGE_TRUST_A;
+
 			uart_write_str(UART0, "Trust no one\n");
 	}
 	// Not needed afterwards so throw it away
@@ -380,8 +381,10 @@ void boot_firmware(){
     uart_write_str(UART0, "Booting firmware...\n");
 	vault_struct vault;
 
+
 	// Read vault status
 	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
+
 
 	// Read secrets from EEPROM and hide block, preventing further access
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
@@ -401,6 +404,7 @@ void boot_firmware(){
 
 			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
+
 			//Calculate the fw address
 			addr = (STORAGE_PARTA + 2) << 10;
 			break;
@@ -447,6 +451,7 @@ void boot_firmware(){
         SysCtlReset();
     }
 
+
 	// Decrypt the metadata
 	if (wc_AesCtrEncrypt(&aes, \
 				(uint8_t *) &decrypted_metadata.metadata, \
@@ -458,6 +463,7 @@ void boot_firmware(){
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
+
 
 
 	// decrypt + print the message
@@ -484,6 +490,7 @@ void boot_firmware(){
 
 	while (1);
 }
+
 
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 
