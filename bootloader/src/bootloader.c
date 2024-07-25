@@ -107,12 +107,11 @@ void update_firmware(void) {
 	// EEPROM/flash results
 	int result = 0;
 	uint32_t size; 						// frame size read in
-	uint32_t old_version = 0xffffffff; 	// version of current firmware
+	uint32_t old_version ;			 	// version of current firmware
 	uint32_t start_block = 300; 		// current block to write into flash (initialize to write to invalid area)
 	uint32_t flash_block_offset = 0; 	// blocks that have been written to flash (make sure to always update this if you increment write_block)
 
 										// pointers to newly received metadata block and old metadata blocks
-	metadata_blob *old_mb;
 	metadata_blob *new_mb;
 
 	uint32_t addr; 						// for calculating flash offsets
@@ -181,6 +180,11 @@ void update_firmware(void) {
 	// Read into vault
 	EEPROMRead((uint32_t *) &vault, SECRETS_VAULT_OFFSET, sizeof(vault));
 
+	old_version = vault.fw_version;
+	vault.fw_version = new_mb->metadata.fw_version;
+	vault.fw_length = new_mb->metadata.fw_length;
+	vault.message_len = new_mb->metadata.message_length;
+
 	switch (vault.s) {
 		// Write to partition B, read old metadata from partition A
 		case STORAGE_TRUST_A:
@@ -190,8 +194,6 @@ void update_firmware(void) {
 
 			uart_write_str(UART0, "Trust a\n");
 
-			old_mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
-			old_version = old_mb->metadata.fw_version;
 			break;
 		// Write to partition A, read old metadata from partition B
 		case STORAGE_TRUST_B:
@@ -200,19 +202,15 @@ void update_firmware(void) {
 			vault.s = STORAGE_TRUST_A;
 			uart_write_str(UART0, "Trust b\n");
 
-			old_mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
-			old_version = old_mb->metadata.fw_version;
 			break;
 		// By default write to A, firmware version is always 1	
 		case STORAGE_TRUST_NONE:
 			start_block = STORAGE_PARTA;
 			//new_permissions = STORAGE_TRUST_A;
 			vault.s = STORAGE_TRUST_A;
-			old_version = 1;
 			uart_write_str(UART0, "Trust no one\n");
 	}
 	// Not needed afterwards so throw it away
-	old_mb = NULL;
 
 	// Handle debug case (if zero just set it to old version)
 	if (new_mb->metadata.fw_version == 0) {
@@ -220,6 +218,7 @@ void update_firmware(void) {
 	}
 
 	// FLOW CHART: Metadata version good?
+	uart_write_hex(UART0, old_version);
 	if (new_mb->metadata.fw_version < old_version) {
 		uart_write_str(UART0, "It is evolving, just backwards\n");
 		SysCtlReset();
@@ -460,22 +459,31 @@ void boot_firmware(){
 	}
 
 
-	//decrypt + print the message
-	if (wc_AesCtrEncrypt(&aes, message, m_addr, decrypted_metadata.metadata.message_length)) {
+	// decrypt + print the message
+	// do NOT use metadata.message_length as the message is always 1024 bytes, message_length is only useful when printing the message
+	if (wc_AesCtrEncrypt(&aes, message, m_addr, FLASH_PAGESIZE)) {
         uart_write_str(UART0, "FATAL aes decrypt error\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
-	for (uint32_t i; i < decrypted_metadata.metadata.message_length; i++) {
+	for (uint32_t i = 0; i < decrypted_metadata.metadata.message_length; i++) {
 		uart_write(UART0, message[i]);
 	}
 
-	copy_fw_to_ram((uint32_t *) addr, \
-			(uint32_t *) 0x20000000, decrypted_metadata.metadata.message_length, &aes);
+	// Finish UART operations
+	uart_write_str(UART0, "GOOD\n");
+	while(UARTBusy(UART0_BASE)){}
 
-	uart_write_str(UART0, "good ram copy\n");
-	SysCtlDelay(700000);
+	// VERY DANGEROUS
+	// Do not use globals after this function is called
+	copy_fw_to_ram((uint32_t *) addr, \
+			(uint32_t *) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
+
+	//These may use globals
+	
+	//uart_write_str(UART0, "good ram copy\n");
+	//SysCtlDelay(700000);
 	
 	jump_to_fw(0x20000001, 0x20007FF0);
 

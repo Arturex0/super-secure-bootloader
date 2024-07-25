@@ -61,7 +61,10 @@ void setup_secrets(void) {
 		//initialize vault
 		vault_struct vs = {
 			VAULT_MAGIC,
-			STORAGE_TRUST_NONE
+			STORAGE_TRUST_NONE,
+			1,
+			0,
+			0
 		};
 
 		//store vault in EEPROM
