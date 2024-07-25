@@ -37,12 +37,14 @@ void update_firmware(void);
 void boot_firmware(void);
 void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
-void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size);
+void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size, Aes *cipher);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 
 typedef void (*pFunction)(void);
 
 //crypto state
+
+uint8_t message[READ_BUFFER_SIZE];
 
 // FLOW CHART: Initialize import state
 
@@ -50,7 +52,7 @@ int main(void) {
 	uint32_t eeprom_status;
 
 	// Initialze the serail port
-    initialize_uarts(UART0);
+    initialize_uarts();
 
 	// Enable EEPROM
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
@@ -243,7 +245,9 @@ void update_firmware(void) {
 	}
 
 	addr = addr + FLASH_PAGESIZE - sizeof(metadata_blob);
-	if (FlashProgram((uint32_t *) new_mb, addr, sizeof(metadata_blob))) {
+
+	// Write **Encrypted** metadata to flash
+	if (FlashProgram((uint32_t *) ct_buffer, addr, sizeof(metadata_blob))) {
 
 		uart_write_str(UART0, "couldn't write metadata :skull:\n");
 		SysCtlReset();
@@ -363,10 +367,12 @@ void boot_firmware(){
 	uint8_t iv[SECRETS_IV_LEN];
 
 	metadata_blob *mb;
+	metadata_blob decrypted_metadata;
 	uint8_t *m_addr;
     uint32_t addr;
 
-
+	// Decryption cipher
+	Aes aes;
 
 	uart_write_str(UART0, "B");
     uart_write_str(UART0, "Booting firmware...\n");
@@ -383,7 +389,6 @@ void boot_firmware(){
 		uart_write_str(UART0, "No corrupted vault :D\n");
 	}
 
-	uint8_t * m_addr;
 	switch (vault.s) {
 		case STORAGE_TRUST_A:
 
@@ -421,18 +426,53 @@ void boot_firmware(){
             return;
 	}
 
+	// Copy iv from metadata 
+	// mb->iv
+    memcpy(iv, mb, SECRETS_IV_LEN);
 
-	//Copy if from metadata 
-    memcpy(iv, mb->iv, SECRETS_IV_LEN);
+	// Setup crypto
+	if (wc_AesInit(&aes, NULL, INVALID_DEVID)) {
+		uart_write_str(UART0, "FATAL aes initialization error\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+    }
 
-	// // Optionally write the message
-    // for (uint32_t i = 0; i < mb->metadata.message_length; i++) {
-    //     uart_write(UART0, m_addr[i]);
-    // }
+	uart_write_str(UART0, "good aes initialization\n");
 
-	SysCtlDelay(700000);
+     // Set AES decryption key + IV
+	// Direction for some modes (CFB and CTR) is always AES_ENCRYPTION.
+    if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_ENCRYPTION)) {
+        uart_write_str(UART0, "FATAL aes key setup error\n");
+		while(UARTBusy(UART0_BASE)){}
+        SysCtlReset();
+    }
 
-	copy_fw_to_ram((uint32_t *) addr, (uint32_t *) 0x20000000, mb->metadata.fw_length);
+	// Decrypt the metadata
+	if (wc_AesCtrEncrypt(&aes, \
+				(uint8_t *) &decrypted_metadata.metadata, \
+				((uint8_t *) mb) + SECRETS_IV_LEN,\
+				sizeof(metadata_blob) - SECRETS_IV_LEN)) 
+	{
+
+        uart_write_str(UART0, "FATAL aes decrypt error\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+
+	//decrypt + print the message
+	if (wc_AesCtrEncrypt(&aes, message, m_addr, decrypted_metadata.metadata.message_length)) {
+        uart_write_str(UART0, "FATAL aes decrypt error\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+	for (uint32_t i; i < decrypted_metadata.metadata.message_length; i++) {
+		uart_write(UART0, message[i]);
+	}
+
+	copy_fw_to_ram((uint32_t *) addr, \
+			(uint32_t *) 0x20000000, decrypted_metadata.metadata.message_length, &aes);
 
 	uart_write_str(UART0, "good ram copy\n");
 	SysCtlDelay(700000);
@@ -460,62 +500,12 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end) {
 }
 
 
-void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size) {
-    Aes aes;
+void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size, Aes *cipher) {
 
-    // Buffer to hold the encrypted data
-    uint8_t ct_buffer[READ_BUFFER_SIZE];
-    // Buffer to hold the decrypted data
-    uint8_t pt_buffer[READ_BUFFER_SIZE];
-
-    // Initialize AES context (key should be set appropriately)
-   // Initialize AES for decryption
-    if (wc_AesInit(&aes, NULL, INVALID_DEVID)) {
-        uart_write_str(UART0, "FATAL aes initialization error\n");
-        SysCtlReset();
-    }
-
-	uart_write_str(UART0, "good aes initialization\n");
-	SysCtlDelay(700000);
-
-
-     // Set AES decryption key
-    if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_DECRYPTION)) {
-        uart_write_str(UART0, "FATAL aes key setup error\n");
-        SysCtlReset();
-    }
-
-	uart_write_str(UART0, "good aes key setup\n");
-	SysCtlDelay(700000);
-
-    while (fw_size > 0) {
-        uint32_t block_size = fw_size > SECRETS_ENCRYPTION_BLOCK_LENGTH ? SECRETS_ENCRYPTION_BLOCK_LENGTH : fw_size;
-
-        // Copy encrypted data from flash to ct_buffer
-        memcpy(ct_buffer, fw_ptr, block_size);
-
-        // // Decrypt the data
-        // wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, block_size);
-
-		// Decrypt the data
-        if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, block_size)) {
-            uart_write_str(UART0, "Decryption error\n");
-            SysCtlReset();
-        }
-
-        // Copy decrypted data to SRAM
-        memcpy(sram_ptr, pt_buffer, block_size);
-
-        // Update pointers and remaining size
-        fw_ptr += block_size / sizeof(uint32_t);
-        sram_ptr += block_size / sizeof(uint32_t);
-        fw_size -= block_size;
-    }
+	wc_AesCtrEncrypt(cipher, (uint8_t *) sram_ptr, (uint8_t *) fw_ptr, fw_size);
 
     // Clean up AES context
-    wc_AesFree(&aes);
-
-	// memcpy(sram_ptr, fw_ptr, fw_size);
+    wc_AesFree(cipher);
 }
 
 
