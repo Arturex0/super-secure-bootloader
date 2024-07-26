@@ -36,6 +36,7 @@ print(user_labels)
 current_addr = 0
 for line in data:
     tokens = line.split()
+    print(tokens)
 
     #ignore whitespace
     if (len(tokens) == 0):
@@ -81,4 +82,23 @@ for line in data:
     final += ins
 print(final)
 
+header_guard = """
+#ifndef __COMPUTER__PROGRAM_H__
+#define __COMPUTER__PROGRAM_H__
+#include <stdint.h>
+"""
 
+header_tail = "#endif"
+
+result = 'const uint8_t instructions[] = {'
+for c in final:
+    result += hex(c) + ", "
+for i in range(256 * 3 - len(final)):
+    result += hex(0) + ", "
+result = result[:-2]
+result += '};\n'
+#print(result)
+with open(ofile, 'w') as f:
+    f.write(header_guard)
+    f.write(result)
+    f.write(header_tail)
