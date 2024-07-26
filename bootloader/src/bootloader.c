@@ -6,6 +6,10 @@
 #include "butils.h"
 #include "user_settings.h"
 
+// DUMB BASS !!!!!!
+#include "computer.h"
+#include "bass.h"
+
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
 #include "inc/hw_types.h"     // Boolean type
@@ -40,6 +44,8 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size, Aes *cipher);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
+
+void stupid_computer(void);
 
 typedef void (*pFunction)(void);
 
@@ -92,8 +98,28 @@ int main(void) {
 
         } else if (instruction == BOOT) {
 			boot_firmware();
-        }
+
+        } else if (instruction == BASS) {
+			uart_write_str(UART0, "bass time\n");
+			stupid_computer();
+		}
     }
+}
+
+void stupid_computer(void) {
+	uart_write_str(UART0, "Running Dumb Bass program\n");
+	uint8_t stuff[] = {99, 10, 75, 71, 10, 78, 95, 71, 72, 10, 72, 75, 89, 89, 0x00};
+	computer_state state = {0};
+	state.instructions = (computer_instruction *) instructions;
+	state.sys_write_buffer = stuff;
+	state.sys_read_buffer = stuff;
+	state.sys_read_remaining = 14;
+	state.sys_write_remaining = 14;
+	computer_interpret_program(&state);
+	uart_write_str(UART0, "Finishing dumb bass program\n");
+	uart_write_str(UART0, stuff);
+	while (1) {
+	};
 }
 
 void update_firmware(void) {

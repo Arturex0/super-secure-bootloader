@@ -23,6 +23,7 @@
 #define UPDATE ((unsigned char)'U')
 #define BOOT ((unsigned char)'B')
 #define FRAME ((unsigned char)'F')
+#define BASS ((unsigned char)'T')
 
 // Return messages
 #define VERIFY_SUCCESS 0
