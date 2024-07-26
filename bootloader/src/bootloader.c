@@ -490,6 +490,28 @@ void boot_firmware(){
 		SysCtlReset();
 	}
 
+	// Verify metadata on boot
+	uint32_t boot_fwversion = decrypted_metadata.metadata.fw_version;
+	uint32_t valut_version = vault.fw_version;
+	if(boot_fwversion != valut_version){
+		uart_write_str(UART0, "The version did not check out\n");
+		SysCtlReset();
+
+	}
+
+	// Verify hmac signature of all data on boot
+	uint32_t boot_size = decrypted_metadata.metadata.fw_length;
+	uint8_t* expected_hmac = decrypted_metadata.hmac;
+	bool passed;
+	passed = verify_hmac((uint8_t *) addr, boot_size, secrets.hmac_key, (uint8_t *) expected_hmac);
+
+	// FLOW CHART: metadata signature good?
+	if (!passed) {
+		uart_write_str(UART0, "HMAC signature does not match on boot:bangbang:\n");
+		SysCtlReset();
+	}
+
+
 	for (uint32_t i = 0; i < decrypted_metadata.metadata.message_length; i++) {
 		uart_write(UART0, message[i]);
 	}
