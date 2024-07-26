@@ -3,12 +3,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define COMP_RA_MASK 0b00000001
-#define COMP_RB_MASK 0b00000010
-#define COMP_RC_MASK 0b00000100
-#define COMP_RD_MASK 0b00001000
-#define COMP_RE_MASK 0b00010000
-#define COMP_RF_MASK 0b00100000
+//#define COMP_RA_MASK 0b00000001
+#define COMP_RA_MASK 0x01
+//#define COMP_RB_MASK 0b00000010
+#define COMP_RB_MASK 0x02
+//#define COMP_RC_MASK 0b00000100
+#define COMP_RC_MASK 0x04
+//#define COMP_RD_MASK 0b00001000
+#define COMP_RD_MASK 0x08
+//#define COMP_RE_MASK 0b00010000
+#define COMP_RE_MASK 0x10
+//#define COMP_RF_MASK 0b00100000
+#define COMP_RF_MASK 0x20
 
 //hex doesn't count up like this but whatever
 #define COMP_MOV_CODE 0x39
