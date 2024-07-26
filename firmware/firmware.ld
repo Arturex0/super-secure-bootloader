@@ -48,7 +48,7 @@ MEMORY
 
 SECTIONS
 {
-    .text 0xe800 :
+    .text 0x20000000 :
     {
         _text = .;
         KEEP(*(.isr_vector))
@@ -56,7 +56,7 @@ SECTIONS
         *(.text*)
         *(.rodata*)
         _etext = .;
-    } > FLASH
+    } > SRAM
 
     .data : AT(ADDR(.text) + SIZEOF(.text))
     {
