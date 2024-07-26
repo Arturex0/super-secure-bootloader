@@ -14,6 +14,7 @@
 
 // Driver API Imports
 #include "driverlib/flash.h"     // FLASH API
+#include "inc/hw_flash.h"
 #include "driverlib/interrupt.h" // Interrupt API
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
 
@@ -46,11 +47,21 @@ typedef void (*pFunction)(void);
 
 // FLOW CHART: Initialize import state
 
+
 int main(void) {
-	uint32_t eeprom_status;
 
 	// Initialze the serail port
     initialize_uarts(UART0);
+
+	if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
+
+		HWREG(0x400FD000) = 0x75100000;
+   		HWREG(0x400FD004) = HWREG(0x400FE1D0) & 0x7FFFFFFC;
+    	HWREG(0x400FD008) = 0xA4420000 |  0x00000008;
+
+	}
+
+	uint32_t eeprom_status;
 
 	// Enable EEPROM
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
@@ -68,6 +79,7 @@ int main(void) {
 	}
 
 	uart_write_str(UART0, "boot\n");
+
 	setup_secrets();
 
 	uart_write_str(UART0, "Found no secrets in secret block!, retrieving secrets\n");
