@@ -10,6 +10,9 @@
 #define COMP_RE_MASK 0b00010000
 #define COMP_RF_MASK 0b00100000
 
+//hex doesn't count up like this but whatever
+#define COMP_MOV_CODE 0x39
+
 #define COMP_ADD_CODE 0x40
 #define COMP_SUB_CODE 0x41
 #define COMP_IMM_CODE 0x42
@@ -64,6 +67,7 @@ uint8_t computer_read_reg(computer_state* state, uint8_t reg_num);
 void computer_write_reg(computer_state* state, uint8_t reg_num, uint8_t value);
 
 void computer_badins(void);
+void computer_mov(computer_state *state, uint8_t a, uint8_t b);
 void computer_add(computer_state *state, uint8_t a, uint8_t b);
 void computer_sub(computer_state *state, uint8_t a, uint8_t b);
 void computer_imm(computer_state *state, uint8_t a, uint8_t b);

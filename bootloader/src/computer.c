@@ -32,6 +32,9 @@ uint8_t interpret_program(computer_state* state) {
 		increment_ip = true;
 		ins = state->instructions[state->ip];
 		switch (ins.opcode) {
+			case COMP_MOV_CODE:
+				computer_mov(state, ins.a, ins.b);
+				break;
 			case COMP_ADD_CODE:
 				computer_add(state, ins.a, ins.b);
 				break;
@@ -94,6 +97,10 @@ void computer_badins(void) {
 	uart_write_str(UART0, "Bad/unimplemented instruction\n");
 	while(UARTBusy(UART0_BASE)){}
 	SysCtlReset();
+}
+
+void computer_mov(computer_state* state, uint8_t a, uint8_t b) {
+	computer_write_reg(state, a, (computer_read_reg(state, b)));
 }
 
 // Ra <- Ra + Rb
