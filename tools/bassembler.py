@@ -79,7 +79,11 @@ for line in data:
         b = int(b)
     current_addr += 1
     ins = p8(opcode) + p8(a) + p8(b)
+    print(ins)
+
+
     final += ins
+
 print(final)
 
 header_guard = """

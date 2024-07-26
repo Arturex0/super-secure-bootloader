@@ -21,19 +21,19 @@
  */
 
 
-uint8_t interpret_program(computer_state* state) {
-	uint8_t opcode;
-	uint8_t a;
-	uint8_t b;
+uint8_t computer_interpret_program(computer_state* state) {
 	computer_instruction ins;
 	bool end = false;
 	bool increment_ip; 
 	while (!end) {
 		increment_ip = true;
 		ins = state->instructions[state->ip];
+		//uart_write_hex(UART0, ins.opcode << 16 | ins.a << 8 | ins.b);
+
 		switch (ins.opcode) {
 			case COMP_MOV_CODE:
 				computer_mov(state, ins.a, ins.b);
+				//uart_write_str(UART0, "MOV\n");
 				break;
 			case COMP_ADD_CODE:
 				computer_add(state, ins.a, ins.b);
@@ -42,6 +42,7 @@ uint8_t interpret_program(computer_state* state) {
 				computer_sub(state, ins.a, ins.b);
 				break;
 			case COMP_IMM_CODE:
+				//uart_write_str(UART0, "IMM\n");
 				computer_imm(state, ins.a, ins.b);
 				break;
 			case COMP_CMP_CODE:
@@ -58,6 +59,7 @@ uint8_t interpret_program(computer_state* state) {
 				break;
 
 			case COMP_JMP_CODE:
+				//uart_write_str(UART0, "JMP\n");
 				computer_jmp(state, ins.a, ins.b);
 				increment_ip = false;
 				break;
@@ -80,7 +82,7 @@ uint8_t interpret_program(computer_state* state) {
 				computer_orr(state, ins.a, ins.b);
 				break;
 			case COMP_XOR_CODE:
-				computer_add(state, ins.a, ins.b);
+				computer_xor(state, ins.a, ins.b);
 				break;
 			default:
 				computer_badins();
@@ -90,7 +92,7 @@ uint8_t interpret_program(computer_state* state) {
 			state->ip += 1;
 		}
 	}
-	return 0;
+	return state->ra;
 }
 
 void computer_badins(void) {
@@ -157,6 +159,7 @@ void computer_ldm(computer_state* state, uint8_t a, uint8_t b) {
 // Ra: syscall
 bool computer_sys(computer_state* state, uint8_t a, uint8_t b) {
 	uint8_t syscode = state->ra;
+	//uart_write_hex(UART0, state->ra);
 
 	switch (syscode) {
 		// move rb into write buffer
@@ -176,7 +179,7 @@ bool computer_sys(computer_state* state, uint8_t a, uint8_t b) {
 				state->ra = 44;
 				return true;
 			}
-			state->rb = *state->sys_read_buffer;
+			state->ra = *state->sys_read_buffer;
 			state->sys_read_buffer++;
 			state->sys_read_remaining--;
 			break;
@@ -264,6 +267,12 @@ uint8_t computer_read_reg(computer_state* state, uint8_t reg_num) {
 }
 
 void computer_write_reg(computer_state* state, uint8_t reg_num, uint8_t value) {
+	/*
+	uart_write_str(UART0, "Writing value");
+	uart_write_hex(UART0, value);
+	uart_write_str(UART0, "into ");
+	uart_write_hex(UART0, reg_num);
+	*/
 	switch (reg_num) {
 		case COMP_RA_MASK:
 			state->ra = value;

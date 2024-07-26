@@ -23,7 +23,7 @@ opcodes = {"mov": 0x39,
            "xor": 0x53}
 
 syscodes = {
-        "wr": 0x10,
-        "re": 0x20,
-        "ex": 0x30
+        "sw": 0x10,
+        "sr": 0x20,
+        "sx": 0x30
         }
