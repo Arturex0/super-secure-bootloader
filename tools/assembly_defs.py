@@ -21,3 +21,9 @@ opcodes = {"mov": 0x39,
            "not": 0x51,
            "orr": 0x52,
            "xor": 0x53}
+
+syscodes = {
+        "wr": 0x10,
+        "re": 0x20,
+        "ex": 0x30
+        }

@@ -8,7 +8,6 @@ if (len(sys.argv) != 3):
 ifile = sys.argv[1]
 ofile = sys.argv[2]
 
-current_addr = 0
 user_labels = {}
 
 final = b''
@@ -16,21 +15,37 @@ final = b''
 with open(ifile, 'r') as f:
     data = f.readlines()
 
+#first run, gather labels
+current_addr = 0
 for line in data:
     tokens = line.split()
     if (len(tokens) == 0):
         continue
     first = tokens[0]
-
-    #see if its a comment
-    if first[0] == ';':
+    if first in opcodes:
+        current_addr += 1
         continue
-
-    #see if its a label
     if first[0] == '<':
         user_labels[first] = current_addr
-        print(f"Label {first} referring to instruction {current_addr}")
+        print(f"Label {first} @ {current_addr}")
+
+
+
+print("compiler run")
+print(user_labels)
+current_addr = 0
+for line in data:
+    tokens = line.split()
+
+    #ignore whitespace
+    if (len(tokens) == 0):
         continue
+    first = tokens[0]
+
+    #see if its a comment or label
+    if first[0] == ';' or first[0] == '<':
+        continue
+
     #otherwise its an instruction
     opcode = opcodes[first]
     a = tokens[1]
@@ -39,6 +54,9 @@ for line in data:
     #check if register
     if a in registers:
         a = registers[a]
+    #check if syscode
+    elif a in syscodes:
+        a = syscodes[a]
     #check if address
     elif a in user_labels:
         a = user_labels[a]
@@ -49,6 +67,9 @@ for line in data:
     #check if register
     if b in registers:
         b = registers[b]
+    #check if syscode
+    elif b in syscodes:
+        b = syscodes[b]
     #check if address
     elif b in user_labels:
         b = user_labels[b]
