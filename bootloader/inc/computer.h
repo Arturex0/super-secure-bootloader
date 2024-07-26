@@ -30,9 +30,9 @@
 #define COMP_ORR_CODE 0x52
 #define COMP_XOR_CODE 0x53
 
-#define COMP_SYS_WRITE
-#define COMP_SYS_READ
-#define COMP_SYS_EXIT
+#define COMP_SYS_WRITE	0x10
+#define COMP_SYS_READ	0x20
+#define COMP_SYS_EXIT	0x30
 
 #define COMP_FLAG_SIGN_SHIFT 0
 #define COMP_FLAG_CARRY_SHIFT 1
@@ -58,6 +58,10 @@ typedef struct _comp {
 	// If we make the ip refer to instruction rather than offset we can fit 256 instructions
 	// versus 256 // 3 = 85 instructions
 	computer_instruction *instructions;
+	uint8_t *sys_write_buffer;
+	uint8_t *sys_read_buffer;
+	uint32_t sys_read_remaining;
+	uint32_t sys_write_remaining;
 	uint8_t memory[256];
 } computer_state;
 

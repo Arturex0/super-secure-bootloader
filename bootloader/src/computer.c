@@ -153,8 +153,42 @@ void computer_ldm(computer_state* state, uint8_t a, uint8_t b) {
 }
 
 //TODO: fixme
+// a and b are not used, just set them to garbage values
+// Ra: syscall
 bool computer_sys(computer_state* state, uint8_t a, uint8_t b) {
-	computer_badins();
+	uint8_t syscode = state->ra;
+
+	switch (syscode) {
+		// move rb into write buffer
+		case COMP_SYS_WRITE:
+			if (state->sys_write_remaining == 0) {
+				state->ra = 33;
+				return true;
+			}
+			*state->sys_write_buffer = state->rb;
+			state->sys_write_buffer++;
+			state->sys_write_remaining--;
+			break;
+
+		// read into ra
+		case COMP_SYS_READ:
+			if (state->sys_read_remaining == 0) {
+				state->ra = 44;
+				return true;
+			}
+			state->rb = *state->sys_read_buffer;
+			state->sys_read_buffer++;
+			state->sys_read_remaining--;
+			break;
+
+		case COMP_SYS_EXIT:
+			return true;
+
+		default:
+			state->ra = 55;
+			return true;
+	}
+
 	return false;
 }
 
