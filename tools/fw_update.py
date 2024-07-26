@@ -109,10 +109,11 @@ def send_firmware(firmware, signature):
         if DEBUG:
             print("Writing firmware frame!")
         firmware_chunk = firmware[i * 1024: (i + 1) * 1024]
-        checksum = calc_checksum(firmware_chunk) # checksum is of only the firmware chunk
+        checksum = calc_checksum(firmware_chunk) # checksum is of only the (cyrpt) firmware chunk
         ser.write(SEND_FRAME)
         size = p16(1024, endian="little")
         ser.write(size + firmware_chunk + checksum)  
+        print(f'The check is {checksum}')
         wait_confirmation(RESP_OK)
     if extra:
         print("Writing partial frame!")

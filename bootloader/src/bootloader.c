@@ -47,6 +47,7 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 void setup_vault(void);
 bool verify_checksum(uint16_t given_checksum, uint8_t data[1024]);
 
+
 typedef void (*pFunction)(void);
 
 //crypto state
@@ -168,12 +169,7 @@ void update_firmware(void) {
 	}
 
 	// FLOW CHART: Read in IV + metadata chunk into memory
-	uint16_t *meta_data;
-	uint16_t meta[2];
-	meta_data = read_frame(ct_buffer); // The size and checksum
-	memcpy(meta, meta_data, sizeof(meta));
-
-	size = meta[0];
+	size = read_frame(ct_buffer);
 	// New metadata blob points into plaintext buffer
 	new_mb = (metadata_blob *) &pt_buffer;
 	if (size != sizeof(metadata_blob)) {
@@ -289,12 +285,9 @@ void update_firmware(void) {
 
 	// Start reading in message data + other data
 	while (true) {
-		meta_data = read_frame(ct_buffer); // The size and checksum
-		uint16_t meta2[2];
-		memcpy(meta2, meta_data, 2);
-
-		size = meta[0];
-		uint16_t checksum = meta[1];
+		 
+		size = read_frame(ct_buffer);
+		
 
 		// FLOW CHART: Size = 0?
 		if (size == 0) {
@@ -311,14 +304,6 @@ void update_firmware(void) {
 			ending = true;
 		}
 
-
-		if (verify_checksum(checksum, pt_buffer)){
-			uart_write_str(UART0, "Checksum did not checkout");
-			SysCtlReset();
-
-		}
-
-		uart_write_str(UART0, "CHECKSUM CHECKED ;)");
 
 		// is this size a multiple of AES/other function block size (16)?
 		// ensuring this just makes decryption easier :D
