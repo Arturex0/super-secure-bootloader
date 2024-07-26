@@ -42,9 +42,9 @@ DEBUG = True
 
 
 # calculates a crc 16- IBM checksum, becasue board had that funcitonality
-def calc_checksum(): 
+def calc_checksum(data): 
     poly = 0xA001
-    crc = 0xFFFF
+    crc = 0x0000
     for byte in data:
         crc ^= byte
 
@@ -54,8 +54,7 @@ def calc_checksum():
             else:
                 crc >>= 1
 
-    return crc & 0xFFFF
-
+    return p16(crc & 0xFFFF, endian="little")
 
 def wait_confirmation(response):
     print("Waiting for bootloader response....")
@@ -94,7 +93,14 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     ser.write(SEND_FRAME)
 
     size = p16(64, endian="little") 
-    ser.write(size + IV + metadata + metadata_hmac)
+    
+    # calculate a checksum please
+    frame_data = IV + metadata + metadata_hmac
+    checksum = calc_checksum(frame_data)
+    print(calc_checksum(b'sob'))
+    ser.write(size + frame_data + checksum)
+
+    #ser.write(size + IV + metadata + metadata_hmac + calc_checksum(IV + metadata + metadata_hmac)) # last bits to take place of check
 
     # Wait for an OK from the bootloader.
     wait_confirmation(RESP_OK)
@@ -109,20 +115,26 @@ def send_firmware(firmware, signature):
     for i in range(full_blocks):
         if DEBUG:
             print("Writing firmware frame!")
+        firmware_chunk = firmware[i * 1024: (i + 1) * 1024]
+        checksum = calc_checksum(firmware_chunk) # checksum is of only the (cyrpt) firmware chunk
         ser.write(SEND_FRAME)
         size = p16(1024, endian="little")
-        ser.write(size + firmware[i * 1024: (i + 1) * 1024])
+        ser.write(size + firmware_chunk + checksum)  
+        print(f'The check is {checksum}')
         wait_confirmation(RESP_OK)
     if extra:
         print("Writing partial frame!")
         ser.write(SEND_FRAME)
         size = p16(extra)
-        ser.write(size + firmware[full_blocks * 1024:])
+        firmware_chunk = firmware[full_blocks * 1024:]
+        checksum = calc_checksum(firmware_chunk)
+        ser.write(size + firmware_chunk + checksum)
         wait_confirmation(RESP_OK)
     
 
     print("Sending in signature please pray for me")
     ser.write(SEND_FRAME)
+
     ser.write(p16(0) + signature)
     wait_confirmation(RESP_OK)
 

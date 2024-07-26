@@ -18,6 +18,7 @@
 #include "driverlib/sysctl.h"    // System control API (clock/reset)
 
 #include "driverlib/eeprom.h"	 // EEPROM API
+
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
 #include "driverlib/uart.h"
@@ -268,8 +269,9 @@ void update_firmware(void) {
 
 	// Start reading in message data + other data
 	while (true) {
-
+		 
 		size = read_frame(ct_buffer);
+		
 
 		// FLOW CHART: Size = 0?
 		if (size == 0) {
@@ -285,6 +287,7 @@ void update_firmware(void) {
 		if (size != READ_BUFFER_SIZE) {
 			ending = true;
 		}
+
 
 		// is this size a multiple of AES/other function block size (16)?
 		// ensuring this just makes decryption easier :D
@@ -547,17 +550,4 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 		}
 	}
 	return ret;
-}
-
-// Takes in data and proposed checksum and returns bool of verification
-bool verify_checksum(uint16_t given_checksum, int data[]){
-
-	// length of the array of data in words 1024 buffer/32 bit word = 32, and array
-	uint16_t checksum = 0; // ROM_Crc16Array(32, data); keeps throwing warning but I included rom.h and rom_map.h
-
-	if(checksum == given_checksum){
-
-		return true;
-	}
-	return false;
 }
