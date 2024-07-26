@@ -44,7 +44,7 @@ DEBUG = True
 # calculates a crc 16- IBM checksum, becasue board had that funcitonality
 def calc_checksum(data): 
     poly = 0xA001
-    crc = 0xFFFF
+    crc = 0x0000
     for byte in data:
         crc ^= byte
 
@@ -93,7 +93,14 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     ser.write(SEND_FRAME)
 
     size = p16(64, endian="little") 
-    ser.write(size + IV + metadata + metadata_hmac) # last bits to take place of check
+    
+    # calculate a checksum please
+    frame_data = IV + metadata + metadata_hmac
+    checksum = calc_checksum(frame_data)
+    print(calc_checksum(b'sob'))
+    ser.write(size + frame_data + checksum)
+
+    #ser.write(size + IV + metadata + metadata_hmac + calc_checksum(IV + metadata + metadata_hmac)) # last bits to take place of check
 
     # Wait for an OK from the bootloader.
     wait_confirmation(RESP_OK)

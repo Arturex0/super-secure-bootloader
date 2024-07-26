@@ -5,10 +5,16 @@
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
 #include "inc/hw_types.h"     // Boolean type
 #include "inc/tm4c123gh6pm.h" // Peripheral Bit Masks and Registers
+							  
+#define DPART_TM4C123GH6PM
+#define DTARGET_IS_TM4C123_RB1
+#define TARGET_IS_BLIZZARD_RB1
 
 #include "driverlib/flash.h"
 #include "driverlib/sysctl.h"
 
+#include "driverlib/rom.h"
+#include "driverlib/rom_map.h"
 /*
  * Program a stream of bytes to the flash.
  * This function takes the starting address of a 1KB page, a pointer to the
@@ -95,16 +101,14 @@ uint32_t read_frame(uint8_t * buffer) {
 
     uint16_t checksum = read_short();
 
-    if (verify_checksum(checksum, buffer)){
+	uart_write_str(UART0, "Looking at the checksum\n");
+    if (verify_checksum(checksum, buffer, data_size)){
 			uart_write_str(UART0, "Checksum did not checkout");
 			SysCtlReset();
 
 		}
 
 		uart_write_str(UART0, "CHECKSUM CHECKED ;)");
-    
-
-
 	// Do not write acknowledge in this function, instead it is up to the caller to run logic and acknowledge the frame \
 	// Only write a restart here if frame is corrupted
 	
@@ -113,6 +117,18 @@ uint32_t read_frame(uint8_t * buffer) {
 
 	//resend, checksum failed
 	//uart_write_str(UART0, "R");
+}
+
+// Takes in proposed checksum and data returns bool of verification
+bool verify_checksum(uint16_t given_checksum, uint8_t *data, uint32_t length) {
+
+	uint16_t checksum = ROM_Crc16(0, data, length); 
+
+	if (checksum == given_checksum) {
+
+		return false; // returns false which means verified
+	}
+	return true;
 }
 
 void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
@@ -139,4 +155,3 @@ void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
         uart_write_str(uart, " ");
     }
 }
-
