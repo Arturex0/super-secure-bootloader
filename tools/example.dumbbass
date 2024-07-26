@@ -1,0 +1,32 @@
+<start>		;stores hello world at 22
+imm	ra 22	;base
+imm rb 1	;offset
+
+imm rc 72	; H
+stm ra rc
+add ra rb
+
+imm rc 101	; E
+stm ra rc
+add ra rb
+
+imm rc 108	; L
+stm ra rc
+add ra rb
+
+imm rc 108	; L
+stm ra rc
+add ra rb
+
+imm rc 111	; O
+stm ra rc
+add ra rb
+
+imm rc 33	; !
+stm ra rc
+add ra rb
+
+imm rc 0	; \x00
+stm ra rc
+
+jmp <start> 0	;infinite loop why not
