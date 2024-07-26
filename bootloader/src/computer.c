@@ -135,14 +135,14 @@ void computer_cmp(computer_state* state, uint8_t a, uint8_t b) {
 }
 
 
-// *Ma = Rb
+// *Ra = Rb
 void computer_stm(computer_state* state, uint8_t a, uint8_t b) {
-	state->memory[a] = computer_read_reg(state, b);
+	state->memory[computer_read_reg(state, a)] = computer_read_reg(state, b);
 }
 
-// Ra = *Mb
+// Ra = *Rb
 void computer_ldm(computer_state* state, uint8_t a, uint8_t b) {
-	computer_write_reg(state, a, state->memory[b]);
+	computer_write_reg(state, a, state->memory[computer_read_reg(state, b)]);
 }
 
 //TODO: fixme
