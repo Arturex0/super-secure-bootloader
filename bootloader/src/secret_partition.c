@@ -23,16 +23,6 @@
 // EEPROMInit() is called, *must* be done after SysCtlPeripheralEnable()
 
 void setup_secrets(void) {
-	// ========== Reset vault if no magic ==========
-	uint32_t vault_magic = *((uint32_t *) (VAULT_BLOCK << 10));
-	if (vault_magic != VAULT_MAGIC) {
-		// magic not detected, erase area and initialize vault
-		vault_struct vs = {
-			VAULT_MAGIC,
-			STORAGE_TRUST_NONE
-		};
-		program_flash((void *) (VAULT_BLOCK << 10), (uint8_t *) &vs, sizeof(vs));
-	}
 
 	uint32_t secret_magic = *(uint32_t *)(SECRETS_BLOCK << 10);
 	if (secret_magic == SECRETS_MAGIC_INDICATOR) {
@@ -66,6 +56,21 @@ void setup_secrets(void) {
 		result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
 		if (result != 0) {
 			result = EEPROMProgram((uint32_t *)&secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets_struct));
+		}
+
+		//initialize vault
+		vault_struct vs = {
+			VAULT_MAGIC,
+			STORAGE_TRUST_NONE,
+			1,
+			0,
+			0
+		};
+
+		//store vault in EEPROM
+		result = EEPROMProgram((uint32_t *)&vs, SECRETS_VAULT_OFFSET, sizeof(vs));
+		if (result != 0) {
+			result = EEPROMProgram((uint32_t *)&vs, SECRETS_VAULT_OFFSET, sizeof(vs));
 		}
 		
 		//Reboot
