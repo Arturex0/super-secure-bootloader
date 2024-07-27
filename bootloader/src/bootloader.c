@@ -44,6 +44,8 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 
 typedef void (*pFunction)(void);
 
+#undef SCREW_OVER_MY_BOARD
+
 //crypto state
 
 uint8_t message[READ_BUFFER_SIZE];
@@ -56,6 +58,7 @@ int main(void) {
 	// Initialze the serail port
     initialize_uarts();
 
+#ifdef SCREW_OVER_MY_BOARD
 	if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
 
 		HWREG(0x400FD000) = 0x75100000;
@@ -63,6 +66,7 @@ int main(void) {
     	HWREG(0x400FD008) = 0xA4420000 |  0x00000008;
 
 	}
+#endif
 
 	uint32_t eeprom_status;
 
