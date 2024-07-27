@@ -496,18 +496,34 @@ void boot_firmware(){
 
 	// Verify metadata on boot
 	uint32_t boot_fwversion = decrypted_metadata.metadata.fw_version;
-	uint32_t valut_version = vault.fw_version;
-	if(boot_fwversion != valut_version){
+	uint32_t vault_version = vault.fw_version;
+
+	if((boot_fwversion != vault_version) && (boot_fwversion != 0)){
 		uart_write_str(UART0, "The version did not check out\n");
 		SysCtlReset();
 
 	}
+	// verify hmac signature of metadata
+	bool passed;
+	passed = verify_hmac((uint8_t *) &decrypted_metadata.metadata, sizeof(decrypted_metadata.metadata), secrets.hmac_key, decrypted_metadata.hmac);
+	if (!passed) {
+		uart_write_str(UART0, "Metadata wtf\n");
+		SysCtlReset();
+	}
 
 	// Verify hmac signature of all data on boot
 	uint32_t boot_size = decrypted_metadata.metadata.fw_length;
-	uint8_t* expected_hmac = decrypted_metadata.hmac;
-	bool passed;
-	passed = verify_hmac((uint8_t *) addr, boot_size, secrets.hmac_key, (uint8_t *) expected_hmac);
+	//pad boot_size
+	boot_size += SECRETS_ENCRYPTION_BLOCK_LENGTH - (boot_size % SECRETS_ENCRYPTION_BLOCK_LENGTH);
+	uint32_t blocks = boot_size >> 10;
+	if (boot_size % FLASH_PAGESIZE) {
+		blocks += 1;
+	}
+	uint8_t* expected_hmac = addr + (uint8_t *) (blocks << 10);
+	uint8_t* start_addr = (uint8_t*) mb + sizeof(mb->iv);
+
+	//metadata size + message size + firmware size
+	passed = verify_hmac((uint8_t *) start_addr, boot_size + FLASH_PAGESIZE + sizeof(decrypted_metadata) - sizeof(decrypted_metadata.iv), secrets.hmac_key, (uint8_t *) expected_hmac);
 
 	// FLOW CHART: metadata signature good?
 	if (!passed) {
