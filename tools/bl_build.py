@@ -21,11 +21,9 @@ SECRETS_FILE=os.path.join(TOOL_DIR, "secret_build_output.txt")
 
 def generate_keys():
     print("making funny keys")
-    vault_key = os.urandom(KEY_SIZE)
     decrypt_key=os.urandom(KEY_SIZE)
     hmac_key=os.urandom(KEY_SIZE)
     with open(SECRETS_FILE, 'w') as f:
-        f.write(vault_key.hex() + '\n')
         f.write(decrypt_key.hex()+ '\n')
         f.write(hmac_key.hex() + '\n')
 
