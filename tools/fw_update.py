@@ -74,12 +74,8 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     # blob =  iv 16 | metadata version 4 | fw length 4 | len message 4 | pad 4 | meta data hmac 32
     assert(len(metadata) == 16)
 
-    version = u32(metadata[:4], endian='little')
-    fw_size = u32(metadata[4:8], endian='little')
-    message_len = u32(metadata[8:12], endian='little')
-
     # Might want to remove after debugging
-    print(f"Version: {version}\nFirmware is: {fw_size} bytes\n message is {message_len} bytes \n")
+    print("Version: {???}\nFirmware is: {???} bytes\n message is {???} bytes \n")
 
     # Handshake for update
     ser.write(SEND_UPDATE)
@@ -165,6 +161,7 @@ def update(ser, infile, debug):
     # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac 32  m_pad  firmware (numbers in bytes)
     #
     # Extracts each portion of the firmware blob
+    """
     signature = firmware_blob[0:32]
     iv = firmware_blob[32:48]  
     metadata = firmware_blob[48:64]
@@ -172,6 +169,12 @@ def update(ser, infile, debug):
     firmware = firmware_blob[96:]
 
     fw_size = u32(metadata[4:8], endian="little")
+    """
+    signature = firmware_blob[0:64]
+    iv = firmware_blob[64:80]
+    metadata = firmware_blob[80:96]
+    metadata_hmac = firmware_blob[96:128]
+    firmware = firmware_blob[128:]
 
 
     send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)

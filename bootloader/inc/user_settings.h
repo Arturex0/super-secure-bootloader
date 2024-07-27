@@ -160,7 +160,7 @@ extern "C" {
 
 /* ECC */
 #undef HAVE_ECC
-#if 0
+#if 1
     #define HAVE_ECC
 
     /* Manually define enabled curves */
