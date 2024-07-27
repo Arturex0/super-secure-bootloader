@@ -10,6 +10,8 @@ from pwn import *
 from Crypto.Hash import HMAC, SHA256
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import AES
+from Crypto.PublicKey import ECC
+from Crypto.Signature import DSS
 import struct
 
 DEFAULT_SECRETS="./secret_build_output.txt"
@@ -26,6 +28,9 @@ def protect_firmware(infile, outfile, version, message, secrets):
     with open(secrets, 'r') as f:
         encrypt_key = bytes.fromhex(f.readline())
         hmac_key = bytes.fromhex(f.readline())
+        ecc_data = bytes.fromhex(f.readline())
+
+        ecc_key = ECC.import_key(ecc_data)
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
 
@@ -48,13 +53,14 @@ def protect_firmware(infile, outfile, version, message, secrets):
     print(iv)
 
     encrypted_blob = cipher.encrypt(to_encrypt)
-    hmac_obj = HMAC.new(hmac_key, digestmod=SHA256) 
-    hmac_obj.update(encrypted_blob)
-    signature = hmac_obj.digest()
+
+    signer = DSS.new(ecc_key, 'fips-186-3')
+    h = SHA256.new(encrypted_blob)
+    signature = signer.sign(h)
+    print(signature.hex())
 
     #signature gets sent in at the end in seperate block
     firmware_blob = signature + iv + encrypted_blob
-
 
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:

@@ -5,6 +5,7 @@
 #include "storage.h"
 #include "butils.h"
 #include "user_settings.h"
+#include "public.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -31,8 +32,9 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/sha.h"
-#include "wolfssl/wolfcrypt/rsa.h"
 #include "wolfssl/wolfcrypt/hmac.h"
+
+#include "wolfssl/wolfcrypt/ecc.h"
 
 // Forward Declarations
 void update_firmware(void);
@@ -139,8 +141,24 @@ void update_firmware(void) {
 	bool ending = false; 				// did we receive a < BUFFER_LENGTH size when reading in firmware?
 
 										// Useful crypto stuff
-	Hmac hmac;
+	wc_Sha256 hash;
 	Aes aes;
+	ecc_key ecc;
+
+	// Set up ecc
+	if (wc_ecc_init(&ecc)) {
+		uart_write_str(UART0, "No memory for ecc key :(\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+	// Import a key
+	if (wc_ecc_import_x963(ecc_public_key, sizeof(ecc_public_key), &ecc)) {
+		uart_write_str(UART0, "Can't init a key smfh\n");
+		while (UARTBusy(UART0_BASE)) {}
+		SysCtlReset();
+	}
+	uart_write_str(UART0, "hey look I have funny ecc key now lmao\n");
 
 	vault_struct vault;
 	uart_write_str(UART0, "U");
@@ -149,9 +167,9 @@ void update_firmware(void) {
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 
-	// setup hmac
-	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
-		uart_write_str(UART0, "FATAL hmac key error\n");
+	// set up hash
+	if (wc_InitSha256(&hash)) {
+		uart_write_str(UART0, "sha256 skill issue\n");
 		SysCtlReset();
 	}
 
@@ -185,7 +203,7 @@ void update_firmware(void) {
 	}
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
-	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
+	wc_Sha256Update(&hash, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 
@@ -330,7 +348,7 @@ void update_firmware(void) {
 		program_flash((void *) addr, ct_buffer, size);
 
 		// Update hash function (this is the cipher text, not the plaintext)
-		if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
+		if (wc_Sha256Update(&hash, (uint8_t *) ct_buffer, size)) {
 			uart_write_str(UART0, "Crypto oopsie\n");
 			SysCtlReset();
 
@@ -346,19 +364,23 @@ void update_firmware(void) {
 	}
 	//handle signature :D
 	int read = 0;
-	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
 		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
-	if (wc_HmacFinal(&hmac, &ct_buffer[SECRETS_HASH_LENGTH]) != 0) {
+
+	if (wc_Sha256Final(&hash, &ct_buffer[SECRETS_SIGNATURE_LENGTH]) != 0) {
 		uart_write_str(UART0, "Couldn't compute hash");
 		SysCtlReset();
 	}
+
+	// TODO: Use funny ecc thing instead of this crap
 	passed = true;
-	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
-		if (ct_buffer[i] != ct_buffer[SECRETS_HASH_LENGTH + i]) {
+	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
+		if (ct_buffer[i] != ct_buffer[SECRETS_SIGNATURE_LENGTH + i]) {
 			passed = false;
 		}
 	}
+
 	if (passed) {
 		uart_write_str(UART0, "omg you are pro gamer!!!!\n");
 	} else {
@@ -366,7 +388,7 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 	addr = (start_block + flash_block_offset) << 10;
-	program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
+	program_flash((void *) addr, ct_buffer, SECRETS_SIGNATURE_LENGTH);
 
 	// Store new vault
 	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
