@@ -65,6 +65,7 @@ venv.bak/
 # bootloader/inc/secrets.h
 tools/secret_build_output.txt
 secret_build_output.txt
+bootloader/inc/public.h
 
 super_secret.magic
 super_secret.txt
