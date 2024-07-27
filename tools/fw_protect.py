@@ -24,7 +24,6 @@ def protect_firmware(infile, outfile, version, message, secrets):
     firmware_padded = pad(firmware, 16)
 
     with open(secrets, 'r') as f:
-        vault_key = bytes.fromhex(f.readline())
         encrypt_key = bytes.fromhex(f.readline())
         hmac_key = bytes.fromhex(f.readline())
 
