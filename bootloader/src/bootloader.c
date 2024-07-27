@@ -44,6 +44,8 @@ void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
 
 typedef void (*pFunction)(void);
 
+#undef SCREW_OVER_MY_BOARD
+
 //crypto state
 
 uint8_t message[READ_BUFFER_SIZE];
@@ -56,20 +58,15 @@ int main(void) {
 	// Initialze the serail port
     initialize_uarts();
 
-	// if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
+#ifdef SCREW_OVER_MY_BOARD
+	if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
 
 	// 	HWREG(0x400FD000) = 0x75100000;
    	// 	HWREG(0x400FD004) = HWREG(0x400FE1D0) & 0x7FFFFFFC;
     // 	HWREG(0x400FD008) = 0xA4420000 |  0x00000008;
 
-	// }
-
-	HWREG(FLASH_FMPRE0) = 0xFFFFFFFF;
-	HWREG(FLASH_FMPPE0) = 0xFFFFFFFF;
-
-	// Disable the debug interface by writing to the FMD and FMC registers
-	HWREG(FLASH_FMD) = 0xA4420004;
-	HWREG(FLASH_FMC) = FLASH_FMC_WRKEY | FLASH_FMC_COMT;
+	}
+#endif
 
 	uint32_t eeprom_status;
 
