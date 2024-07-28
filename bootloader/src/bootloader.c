@@ -158,6 +158,16 @@ void update_firmware(void) {
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
 	}
+	uint32_t check_result;
+	check_result = wc_ecc_check_key(&ecc);
+	if (check_result == MP_OKAY) {
+		uart_write_str(UART0, "Key good!\n");
+	} else {
+		uart_write_str(UART0, "Key not good\n");
+		while (UARTBusy(UART0_BASE)) {};
+		SysCtlReset();
+
+	}
 	uart_write_str(UART0, "hey look I have funny ecc key now lmao\n");
 
 	vault_struct vault;
@@ -373,12 +383,34 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 
-	// TODO: Use funny ecc thing instead of this crap
 	passed = true;
+	/*
+	// TODO: Use funny ecc thing instead of this crap
 	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
 		if (ct_buffer[i] != ct_buffer[SECRETS_SIGNATURE_LENGTH + i]) {
 			passed = false;
 		}
+	}
+	*/
+	//passed = 0;
+	
+	check_result = wc_ecc_check_key(&ecc);
+	if (check_result == MP_OKAY) {
+		uart_write_str(UART0, "Key good!\n");
+	} else {
+		uart_write_str(UART0, "Key not good\n");
+		while (UARTBusy(UART0_BASE)) {};
+		SysCtlReset();
+
+	}
+	uint32_t ecc_result;
+	ecc_result = wc_ecc_verify_hash(ct_buffer, SECRETS_SIGNATURE_LENGTH, &ct_buffer[SECRETS_SIGNATURE_LENGTH], SECRETS_HASH_LENGTH, (int *) &passed, &ecc) ;
+	if (ecc_result) {
+		uart_write_str(UART0, "could not do basic math :sob:");
+		uart_write_hex(UART0, ecc_result);
+		while (UARTBusy(UART0_BASE)) {};
+		SysCtlReset();
+
 	}
 
 	if (passed) {
@@ -626,4 +658,11 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 		}
 	}
 	return ret;
+}
+
+
+unsigned int my_rng_seed_gen(void) {
+	uart_write_str(UART0, "RNG IS BEING USED OH NO THIS IS BAD\n");
+	return 4;	// chosen by fair dice roll
+				// guaranteed to be random
 }
