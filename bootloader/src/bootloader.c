@@ -158,16 +158,7 @@ void update_firmware(void) {
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
 	}
-	uint32_t check_result;
-	check_result = wc_ecc_check_key(&ecc);
-	if (check_result == MP_OKAY) {
-		uart_write_str(UART0, "Key good!\n");
-	} else {
-		uart_write_str(UART0, "Key not good\n");
-		while (UARTBusy(UART0_BASE)) {};
-		SysCtlReset();
 
-	}
 	uart_write_str(UART0, "hey look I have funny ecc key now lmao\n");
 
 	vault_struct vault;
@@ -372,13 +363,25 @@ void update_firmware(void) {
 		uart_write_str(UART0, "No space for signature :(");
 		SysCtlReset();
 	}
+
+	// NEW ADDITION! We need to read the signature length because it is now *variable*!
+	uint16_t signature_length;
+	signature_length = read_short();
+	if (signature_length > 128) {
+		uart_write_str(UART0, "Wtf that length is too big\n");
+		while (UARTBusy(UART0_BASE)) {};
+		SysCtlReset();
+	}
+	uart_write_hex(UART0, signature_length);
+	nl(UART0);
+
 	//handle signature :D
 	int read = 0;
-	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
+	for (int i = 0; i < signature_length; i++) {
 		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
 
-	if (wc_Sha256Final(&hash, &ct_buffer[SECRETS_SIGNATURE_LENGTH]) != 0) {
+	if (wc_Sha256Final(&hash, &ct_buffer[signature_length]) != 0) {
 		uart_write_str(UART0, "Couldn't compute hash");
 		SysCtlReset();
 	}
@@ -394,17 +397,10 @@ void update_firmware(void) {
 	*/
 	//passed = 0;
 	
-	check_result = wc_ecc_check_key(&ecc);
-	if (check_result == MP_OKAY) {
-		uart_write_str(UART0, "Key good!\n");
-	} else {
-		uart_write_str(UART0, "Key not good\n");
-		while (UARTBusy(UART0_BASE)) {};
-		SysCtlReset();
-
-	}
 	uint32_t ecc_result;
-	ecc_result = wc_ecc_verify_hash(ct_buffer, SECRETS_SIGNATURE_LENGTH, &ct_buffer[SECRETS_SIGNATURE_LENGTH], SECRETS_HASH_LENGTH, (int *) &passed, &ecc) ;
+
+	uart_write_str(UART0, "Calculating...\n");
+	ecc_result = wc_ecc_verify_hash(ct_buffer, signature_length, &ct_buffer[signature_length], SECRETS_HASH_LENGTH, (int *) &passed, &ecc) ;
 	if (ecc_result) {
 		uart_write_str(UART0, "could not do basic math :sob:");
 		uart_write_hex(UART0, ecc_result);
@@ -412,6 +408,7 @@ void update_firmware(void) {
 		SysCtlReset();
 
 	}
+	uart_write_str(UART0, "Finished!\n");
 
 	if (passed) {
 		uart_write_str(UART0, "omg you are pro gamer!!!!\n");
