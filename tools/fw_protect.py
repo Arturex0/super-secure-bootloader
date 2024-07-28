@@ -12,6 +12,8 @@ from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import AES
 from Crypto.PublicKey import ECC
 from Crypto.Signature import DSS
+from Crypto.Util.asn1 import DerSequence, DerInteger
+
 import struct
 
 DEFAULT_SECRETS="./secret_build_output.txt"
@@ -50,17 +52,27 @@ def protect_firmware(infile, outfile, version, message, secrets):
     to_encrypt = metadata + metadata_hmac + m_pad + firmware_padded
     cipher = AES.new(encrypt_key, AES.MODE_CTR)
     iv = cipher.nonce + b'\x00' * 8
-    print(iv)
+    #print(iv)
 
     encrypted_blob = cipher.encrypt(to_encrypt)
 
     signer = DSS.new(ecc_key, 'fips-186-3')
     h = SHA256.new(encrypted_blob)
-    signature = signer.sign(h)
+    signed_data = signer.sign(h)
+    print(len(signed_data))
+    print(signed_data.hex())
+
+    r = int.from_bytes(signed_data[:32])
+    s = int.from_bytes(signed_data[32:])
+    seq = DerSequence()
+    seq.append(DerInteger(r))
+    seq.append(DerInteger(s))
+    signature = seq.encode()
     print(signature.hex())
+    print(len(signature))
 
     #signature gets sent in at the end in seperate block
-    firmware_blob = signature + iv + encrypted_blob
+    firmware_blob = int.to_bytes(len(signature)) + signature + iv + encrypted_blob
 
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:

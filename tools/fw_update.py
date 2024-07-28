@@ -40,6 +40,11 @@ SEND_FRAME = b"F"
 FRAME_SIZE = 1024
 DEBUG = True
 
+SIZE_SIG = 72
+SIZE_IV = 16
+SIZE_METADATA = 16
+SIZE_HMAC = 32
+
 
 # calculates a crc 16- IBM checksum, becasue board had that funcitonality
 def calc_checksum(data): 
@@ -170,11 +175,18 @@ def update(ser, infile, debug):
 
     fw_size = u32(metadata[4:8], endian="little")
     """
-    signature = firmware_blob[0:64]
-    iv = firmware_blob[64:80]
-    metadata = firmware_blob[80:96]
-    metadata_hmac = firmware_blob[96:128]
-    firmware = firmware_blob[128:]
+    cur = 1
+    SIZE_SIG = firmware_blob[0]
+    print(f"Signature is {SIZE_SIG} bytes")
+    signature = firmware_blob[cur : cur + SIZE_SIG]
+    cur += SIZE_SIG
+    iv = firmware_blob[cur : cur + SIZE_IV]
+    cur += SIZE_IV
+    metadata = firmware_blob[cur: cur + SIZE_METADATA]
+    cur += SIZE_METADATA
+    metadata_hmac = firmware_blob[cur : cur + SIZE_HMAC]
+    cur += SIZE_HMAC
+    firmware = firmware_blob[cur:]
 
 
     send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)
