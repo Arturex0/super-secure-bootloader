@@ -136,7 +136,7 @@ def send_firmware(firmware, signature):
     print("Sending in signature please pray for me")
     ser.write(SEND_FRAME)
 
-    ser.write(p16(0) + signature)
+    ser.write(p16(0) + p16(len(signature)) + signature)
     wait_confirmation(RESP_OK)
 
 
