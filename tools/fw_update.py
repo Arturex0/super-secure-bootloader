@@ -175,8 +175,8 @@ def update(ser, infile, debug):
 
     fw_size = u32(metadata[4:8], endian="little")
     """
-    cur = 1
-    SIZE_SIG = firmware_blob[0]
+    cur = 2
+    SIZE_SIG = u16(firmware_blob[:2], endian="little")
     print(f"Signature is {SIZE_SIG} bytes")
     signature = firmware_blob[cur : cur + SIZE_SIG]
     cur += SIZE_SIG

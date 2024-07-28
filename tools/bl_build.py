@@ -9,7 +9,7 @@ the build outputs into the host tools directory for programming.
 import os
 import pathlib
 import subprocess
-from Crypto.PublicKey import ECC
+from Crypto.PublicKey import RSA
 
 #change this once we decide on algorithm
 KEY_SIZE=16
@@ -26,10 +26,10 @@ def generate_keys():
     decrypt_key=os.urandom(KEY_SIZE)
     hmac_key=os.urandom(KEY_SIZE)
 
-    ecc_key = ECC.generate(curve='p256')
+    rsa_key = RSA.generate(3072)
 
-    private = ecc_key.export_key(format='DER')
-    public = ecc_key.public_key().export_key(format='SEC1')
+    private = rsa_key.export_key(format='DER')
+    public = rsa_key.public_key().export_key(format='DER')
 
     header_guard = \
 """
@@ -39,7 +39,7 @@ def generate_keys():
 """
     header_tail = "#endif"
 
-    result = 'const uint8_t ecc_public_key[] = {'
+    result = 'const uint8_t rsa_public_key[] = {'
     for c in public:
         result += hex(c) + ", "
     result = result[:-2]

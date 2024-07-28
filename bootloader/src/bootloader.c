@@ -154,7 +154,7 @@ void update_firmware(void) {
 	}
 
 	// Import a key
-	uint32_t length_imported;
+	uint32_t length_imported = 0;
 	if (wc_RsaPublicKeyDecode(rsa_public_key, (word32 *) &length_imported, &rsa, sizeof(rsa_public_key))) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
 		while (UARTBusy(UART0_BASE)) {}
@@ -369,7 +369,7 @@ void update_firmware(void) {
 	// NEW ADDITION! We need to read the signature length because it is now *variable*!
 	uint16_t signature_length;
 	signature_length = read_short();
-	if (signature_length > FLASH_PAGESIZE) {
+	if (signature_length > (FLASH_PAGESIZE >> 1)) {
 		uart_write_str(UART0, "Wtf that length is too big\n");
 		while (UARTBusy(UART0_BASE)) {};
 		SysCtlReset();
