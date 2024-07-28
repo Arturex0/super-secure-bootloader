@@ -34,7 +34,8 @@
 #include "wolfssl/wolfcrypt/sha.h"
 #include "wolfssl/wolfcrypt/hmac.h"
 
-#include "wolfssl/wolfcrypt/ecc.h"
+#include "wolfssl/wolfcrypt/rsa.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
 
 // Forward Declarations
 void update_firmware(void);
@@ -143,17 +144,18 @@ void update_firmware(void) {
 										// Useful crypto stuff
 	wc_Sha256 hash;
 	Aes aes;
-	ecc_key ecc;
+	RsaKey rsa;
 
 	// Set up ecc
-	if (wc_ecc_init(&ecc)) {
-		uart_write_str(UART0, "No memory for ecc key :(\n");
+	if (wc_InitRsaKey(&rsa, NULL)) {
+		uart_write_str(UART0, "No memory for rsa key :(\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
 	// Import a key
-	if (wc_ecc_import_x963(ecc_public_key, sizeof(ecc_public_key), &ecc)) {
+	uint32_t length_imported;
+	if (wc_RsaPublicKeyDecode(rsa_public_key, (word32 *) &length_imported, &rsa, sizeof(rsa_public_key))) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
@@ -367,7 +369,7 @@ void update_firmware(void) {
 	// NEW ADDITION! We need to read the signature length because it is now *variable*!
 	uint16_t signature_length;
 	signature_length = read_short();
-	if (signature_length > 128) {
+	if (signature_length > FLASH_PAGESIZE) {
 		uart_write_str(UART0, "Wtf that length is too big\n");
 		while (UARTBusy(UART0_BASE)) {};
 		SysCtlReset();
@@ -381,33 +383,31 @@ void update_firmware(void) {
 		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
 
-	if (wc_Sha256Final(&hash, &ct_buffer[signature_length]) != 0) {
+	// decode signature into ct buffer
+	
+	uint8_t *sig_addr;
+	if (wc_RsaSSL_VerifyInline
+			(ct_buffer, signature_length, &sig_addr, &rsa) < 0) {
+		uart_write_str(UART0, "smfh rsa verification error\n");
+		while (UARTBusy(UART0_BASE)) {};
+		SysCtlReset();
+	}
+	
+
+	// store hash in pt_buffer
+	if (wc_Sha256Final(&hash, pt_buffer) != 0) {
 		uart_write_str(UART0, "Couldn't compute hash");
 		SysCtlReset();
 	}
 
+
 	passed = true;
-	/*
-	// TODO: Use funny ecc thing instead of this crap
 	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
-		if (ct_buffer[i] != ct_buffer[SECRETS_SIGNATURE_LENGTH + i]) {
+		if (sig_addr[i] != pt_buffer[i]) {
 			passed = false;
 		}
 	}
-	*/
-	//passed = 0;
-	
-	uint32_t ecc_result;
 
-	uart_write_str(UART0, "Calculating...\n");
-	ecc_result = wc_ecc_verify_hash(ct_buffer, signature_length, &ct_buffer[signature_length], SECRETS_HASH_LENGTH, (int *) &passed, &ecc) ;
-	if (ecc_result) {
-		uart_write_str(UART0, "could not do basic math :sob:");
-		uart_write_hex(UART0, ecc_result);
-		while (UARTBusy(UART0_BASE)) {};
-		SysCtlReset();
-
-	}
 	uart_write_str(UART0, "Finished!\n");
 
 	if (passed) {
@@ -655,11 +655,4 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 		}
 	}
 	return ret;
-}
-
-
-unsigned int my_rng_seed_gen(void) {
-	uart_write_str(UART0, "RNG IS BEING USED OH NO THIS IS BAD\n");
-	return 4;	// chosen by fair dice roll
-				// guaranteed to be random
 }
