@@ -6,13 +6,12 @@
  * | Iv Metadata | Message | ...Firmware... | Signature |
  */
 //first partition
-#define STORAGE_PARTA 56
+#define STORAGE_PARTA 100
 //second partition
-#define STORAGE_PARTB 156
+#define STORAGE_PARTB 178
 
-#define STORAGE_PART_SIZE 100
+#define STORAGE_PART_SIZE 78
 #define VAULT_MAGIC 0x05EC12E7
-#define VAULT_BLOCK 54
 
 enum STORAGE_PART_STATUS {
 	STORAGE_TRUST_NONE,

@@ -313,7 +313,7 @@ extern "C" {
     #define HAVE_ED25519 /* ED25519 Requires SHA512 */
 
     /* Optionally use small math (less flash usage, but much slower) */
-    #if 1
+    #if 0
         #define CURVED25519_SMALL
     #endif
 #endif
