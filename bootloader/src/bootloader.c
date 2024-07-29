@@ -78,11 +78,11 @@ int main(void) {
 	// Enable EEPROM
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
 
-	// While true if EEPROM is not ready
+	// While loop if EEPROM is not ready
 	while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0)) {
 	}
 
-	//make sure EEPROM is working
+    // Initialize and check if EEPROM is working to prevent persisting errors
 	eeprom_status = EEPROMInit();
 	if (eeprom_status == EEPROM_INIT_ERROR) {
 		uart_write_str(UART0, "Fatal EEPROM error\n");
@@ -100,10 +100,10 @@ int main(void) {
 	// TODO: Should only read vault decryption keays. Other keys are not needed rn 
 
     uart_write_str(UART0, "Welcome to the BWSI Vehicle Update Service!\n");
-	// TODO: Boot fw, if we dont recieve an update request in 500ms 
+	// TODO: Boot fw if we dont recieve an update request in 500ms 
     uart_write_str(UART0, "Press B to run the firmware.\n");
 
-	// Not needed, but uart requres this var. Indicates that a response has beed read. In blocking function always true. 
+	// Indicates when UART has read a char
     int resp;
 
     while (1) {
@@ -141,7 +141,7 @@ void update_firmware(void) {
 										// pointers to newly received metadata block and old metadata blocks
 	metadata_blob *new_mb;
 
-	uint32_t addr; 						// for calculating flash offsets
+	uint32_t addr; 						// for calculating addresses in flash to read/write from
 
 	bool passed; 						// did the metadata pass hmac
 	bool ending = false; 				// did we receive a < BUFFER_LENGTH size when reading in firmware?
@@ -163,6 +163,7 @@ void update_firmware(void) {
 	size = read_frame(ct_buffer);
 
 	// New metadata blob points into plaintext buffer
+    // Ensure size of frame data is equal to size of a metadata blob 
 	new_mb = (metadata_blob *) &pt_buffer;
 	if (size != sizeof(metadata_blob)) {
 		uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
@@ -170,7 +171,7 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 
-	// save iv in global (useful) and plaintext
+	// save iv in global and plaintext
 	memcpy(&iv, ct_buffer, sizeof(new_mb->iv));
 	memcpy(pt_buffer, ct_buffer, sizeof(new_mb->iv));
 
@@ -267,20 +268,21 @@ void update_firmware(void) {
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
-
+	// Prevents BufferOverflow
 	if (flash_block_offset >= STORAGE_PART_SIZE) {
 		uart_write_str(UART0, "no storage :<\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
-
-	addr = (start_block + flash_block_offset) << 10;
+    // Calculate address to flash metadata into
+	addr = (start_block) << 10;
 	if (FlashErase(addr)) {
 		uart_write_str(UART0, "couldn't erase flash :sob:\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
+    // Check for available storage
 	addr = addr + FLASH_PAGESIZE - sizeof(metadata_blob);
 
 	// Write **Encrypted** metadata to flash
@@ -418,6 +420,8 @@ void update_firmware(void) {
 	while (UARTBusy(UART0_BASE)) {};
 	SysCtlReset();
 }
+
+
 
 void boot_firmware(){
 
