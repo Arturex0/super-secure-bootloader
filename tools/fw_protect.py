@@ -36,6 +36,9 @@ def protect_firmware(infile, outfile, version, message, secrets):
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
 
+    # Do stupid stuff before encryption here!
+    firmware = basscrypt(firmware)
+
     # Allocate one flash block to message that goes before firmware
     m = message.encode()
     m_pad = m + b'\xff' * (1024 - len(m))
@@ -68,6 +71,14 @@ def protect_firmware(infile, outfile, version, message, secrets):
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:
         outfile.write(firmware_blob)
+
+def basscrypt(stuff):
+    key = b'bananaaa'
+    r = b''
+    for i in range(len(stuff)):
+        e = stuff[i] ^ key[i % 8]
+        r += int.to_bytes(e)
+    return bytes(r)
 
 
 if __name__ == "__main__":
