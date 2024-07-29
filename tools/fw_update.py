@@ -37,6 +37,7 @@ RESP_UPDATE = b"U"
 SEND_UPDATE = b"U"
 SEND_FRAME = b"F"
 
+SIGNATURE_SIZE = 64
 FRAME_SIZE = 1024
 DEBUG = True
 
@@ -136,7 +137,7 @@ def send_firmware(firmware, signature):
     print("Sending in signature please pray for me")
     ser.write(SEND_FRAME)
 
-    ser.write(p16(0) + p16(len(signature)) + signature)
+    ser.write(p16(0) + signature)
     wait_confirmation(RESP_OK)
 
 
@@ -176,8 +177,11 @@ def update(ser, infile, debug):
     fw_size = u32(metadata[4:8], endian="little")
     """
     cur = 2
+    #this is not sent to the bootloader, it is just useful for quickly changing signing schemes
     SIZE_SIG = u16(firmware_blob[:2], endian = 'little')
     print(f"Signature is {SIZE_SIG} bytes")
+    if SIZE_SIG != SIGNATURE_SIZE:
+        print("WARNING: Signature size mismatch!")
     signature = firmware_blob[cur : cur + SIZE_SIG]
     cur += SIZE_SIG
     iv = firmware_blob[cur : cur + SIZE_IV]
