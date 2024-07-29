@@ -7,31 +7,31 @@ imm rc 98		; 'b'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'a'
+imm rc 97		; 'a'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'n'
+imm rc 110		; 'n'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'a'
+imm rc 97		; 'a'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'n'
+imm rc 110		; 'n'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'a'
+imm rc 97		; 'a'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'a'
+imm rc 97		; 'a'
 stm ra rc
 add ra rb
 
-imm rc 98		; 'a'
+imm rc 97		; 'a'
 stm ra rc
 
 <encrypt_setup>
