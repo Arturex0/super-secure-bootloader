@@ -86,13 +86,11 @@ for line in data:
 
 print(final)
 
-header_guard = """
-#ifndef __COMPUTER__PROGRAM_H__
-#define __COMPUTER__PROGRAM_H__
+top = """
 #include <stdint.h>
+#include "bass.h"
 """
 
-header_tail = "#endif"
 
 result = 'const uint8_t instructions[] = {'
 for c in final:
@@ -103,6 +101,5 @@ result = result[:-2]
 result += '};\n'
 #print(result)
 with open(ofile, 'w') as f:
-    f.write(header_guard)
+    f.write(top)
     f.write(result)
-    f.write(header_tail)
