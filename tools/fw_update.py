@@ -37,8 +37,14 @@ RESP_UPDATE = b"U"
 SEND_UPDATE = b"U"
 SEND_FRAME = b"F"
 
+SIGNATURE_SIZE = 64
 FRAME_SIZE = 1024
 DEBUG = True
+
+SIZE_SIG = 72
+SIZE_IV = 16
+SIZE_METADATA = 16
+SIZE_HMAC = 32
 
 
 # calculates a crc 16- IBM checksum, becasue board had that funcitonality
@@ -74,12 +80,8 @@ def send_metadata(ser, metadata, IV, metadata_hmac, debug=False):
     # blob =  iv 16 | metadata version 4 | fw length 4 | len message 4 | pad 4 | meta data hmac 32
     assert(len(metadata) == 16)
 
-    version = u32(metadata[:4], endian='little')
-    fw_size = u32(metadata[4:8], endian='little')
-    message_len = u32(metadata[8:12], endian='little')
-
     # Might want to remove after debugging
-    print(f"Version: {version}\nFirmware is: {fw_size} bytes\n message is {message_len} bytes \n")
+    print("Version: {???}\nFirmware is: {???} bytes\n message is {???} bytes \n")
 
     # Handshake for update
     ser.write(SEND_UPDATE)
@@ -165,6 +167,7 @@ def update(ser, infile, debug):
     # firmware_blob = signature 32  iv 16  metadata 16  metadata_hmac 32  m_pad  firmware (numbers in bytes)
     #
     # Extracts each portion of the firmware blob
+    """
     signature = firmware_blob[0:32]
     iv = firmware_blob[32:48]  
     metadata = firmware_blob[48:64]
@@ -172,6 +175,22 @@ def update(ser, infile, debug):
     firmware = firmware_blob[96:]
 
     fw_size = u32(metadata[4:8], endian="little")
+    """
+    cur = 2
+    #this is not sent to the bootloader, it is just useful for quickly changing signing schemes
+    SIZE_SIG = u16(firmware_blob[:2], endian = 'little')
+    print(f"Signature is {SIZE_SIG} bytes")
+    if SIZE_SIG != SIGNATURE_SIZE:
+        print("WARNING: Signature size mismatch!")
+    signature = firmware_blob[cur : cur + SIZE_SIG]
+    cur += SIZE_SIG
+    iv = firmware_blob[cur : cur + SIZE_IV]
+    cur += SIZE_IV
+    metadata = firmware_blob[cur: cur + SIZE_METADATA]
+    cur += SIZE_METADATA
+    metadata_hmac = firmware_blob[cur : cur + SIZE_HMAC]
+    cur += SIZE_HMAC
+    firmware = firmware_blob[cur:]
 
 
     send_metadata(ser, metadata, iv, metadata_hmac, debug=debug)

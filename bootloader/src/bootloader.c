@@ -5,6 +5,7 @@
 #include "storage.h"
 #include "butils.h"
 #include "user_settings.h"
+#include "public.h"
 
 // Hardware Imports
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -31,8 +32,9 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/sha.h"
-#include "wolfssl/wolfcrypt/rsa.h"
 #include "wolfssl/wolfcrypt/hmac.h"
+
+#include "wolfssl/wolfcrypt/ed25519.h"
 
 // Forward Declarations
 void update_firmware(void);
@@ -81,6 +83,7 @@ int main(void) {
 	eeprom_status = EEPROMInit();
 	if (eeprom_status == EEPROM_INIT_ERROR) {
 		uart_write_str(UART0, "Fatal EEPROM error\n");
+		while(UARTBusy(UART0_BASE)){}
 		//Reboot
 		SysCtlReset();
 	}
@@ -124,6 +127,7 @@ void update_firmware(void) {
 	// EEPROM/flash results
 	int result = 0;
 	uint32_t size; 						// frame size read in
+	uint32_t package_size;				// Calculate size of package for verification
 
 	uint32_t old_version;			 	// version of current firmware
 
@@ -139,8 +143,9 @@ void update_firmware(void) {
 	bool ending = false; 				// did we receive a < BUFFER_LENGTH size when reading in firmware?
 
 										// Useful crypto stuff
-	Hmac hmac;
 	Aes aes;
+	ed25519_key ed25519;
+
 
 	vault_struct vault;
 	uart_write_str(UART0, "U");
@@ -149,18 +154,14 @@ void update_firmware(void) {
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 
-	// setup hmac
-	if (wc_HmacSetKey(&hmac, WC_SHA256, secrets.hmac_key, sizeof(secrets.hmac_key)) != 0) {
-		uart_write_str(UART0, "FATAL hmac key error\n");
-		SysCtlReset();
-	}
-
 	// FLOW CHART: Read in IV + metadata chunk into memory
 	size = read_frame(ct_buffer);
+
 	// New metadata blob points into plaintext buffer
 	new_mb = (metadata_blob *) &pt_buffer;
 	if (size != sizeof(metadata_blob)) {
 		uart_write_str(UART0, "You did not give me metadata and now I am angry\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
@@ -171,27 +172,29 @@ void update_firmware(void) {
 	// setup decryption
 	if (wc_AesInit(&aes, NULL, INVALID_DEVID)) {
 		uart_write_str(UART0, "FATAL cipher error\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	// Direction for some modes (CFB and CTR) is always AES_ENCRYPTION.
 	if (wc_AesSetKey(&aes, secrets.decrypt_key, sizeof(secrets.decrypt_key), iv, AES_ENCRYPTION)){
 		uart_write_str(UART0, "second FATAL cipher error\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	// copy in the rest of the unencrypted firmware blob into pt
 	if (wc_AesCtrEncrypt(&aes, pt_buffer + sizeof(new_mb->iv), ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv))) {
 		uart_write_str(UART0, "Idk how to do the funny unencryption thing /shrug\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
-
-	wc_HmacUpdate(&hmac, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 
 	// FLOW CHART: metadata signature good?
 	if (!passed) {
 		uart_write_str(UART0, "HMAC signature does not match :bangbang:\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	uart_write_str(UART0, "you're did it\n");
@@ -244,6 +247,7 @@ void update_firmware(void) {
 	// FLOW CHART: Metadata version good?
 	if (new_mb->metadata.fw_version < old_version) {
 		uart_write_str(UART0, "It is evolving, just backwards\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
@@ -252,17 +256,20 @@ void update_firmware(void) {
 	// This is to check that metadata_blob is multiple of 4 bytes which it should be unless I screwed up badly
 	if (sizeof(metadata_blob) % 4) {
 		uart_write_str(UART0, "oops messed up struct alignment\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
 	if (flash_block_offset >= STORAGE_PART_SIZE) {
 		uart_write_str(UART0, "no storage :<\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
 	addr = (start_block + flash_block_offset) << 10;
 	if (FlashErase(addr)) {
 		uart_write_str(UART0, "couldn't erase flash :sob:\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
@@ -272,6 +279,7 @@ void update_firmware(void) {
 	if (FlashProgram((uint32_t *) ct_buffer, addr, sizeof(metadata_blob))) {
 
 		uart_write_str(UART0, "couldn't write metadata :skull:\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	flash_block_offset++;
@@ -297,6 +305,7 @@ void update_firmware(void) {
 		// When a partial block is sent data should stop being read
 		if (ending) {
 			uart_write_str(UART0, "do not write non signature data after a partial block\n");
+			while(UARTBusy(UART0_BASE)){}
 			SysCtlReset();
 		}
 
@@ -309,32 +318,21 @@ void update_firmware(void) {
 		// ensuring this just makes decryption easier :D
 		if (size % SECRETS_ENCRYPTION_BLOCK_LENGTH) {
 			uart_write_str(UART0, "partial block received, can't decrypt\n");
+			while(UARTBusy(UART0_BASE)){}
 			SysCtlReset();
 		}
 
 		// FLOW CHART: is flash_block_offset < 99?
 		if (flash_block_offset >= STORAGE_PART_SIZE - 1) {
 			uart_write_str(UART0, "We not beaver balling\n");
+			while(UARTBusy(UART0_BASE)){}
 			SysCtlReset();
 		}
 		addr = (start_block + flash_block_offset) << 10;
 		flash_block_offset++;
 
-		// //decrypt block
-		// if (wc_AesCtrEncrypt(&aes, pt_buffer, ct_buffer, size)) {
-		// 	uart_write_str(UART0, "idk how to do the crypto stuff all the cool kids are talking about\n");
-		// 	SysCtlReset();
-		// }
-
 		// Write to flash
 		program_flash((void *) addr, ct_buffer, size);
-
-		// Update hash function (this is the cipher text, not the plaintext)
-		if (wc_HmacUpdate(&hmac, (uint8_t *) ct_buffer, size)) {
-			uart_write_str(UART0, "Crypto oopsie\n");
-			SysCtlReset();
-
-		}
 
 		// Acknowledge this block
 		uart_write_str(UART0, "A");
@@ -342,31 +340,62 @@ void update_firmware(void) {
 	// This shouldn't happen but added for redundency
 	if (flash_block_offset >= STORAGE_PART_SIZE) {
 		uart_write_str(UART0, "No space for signature :(");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
+
 	//handle signature :D
 	int read = 0;
-	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
+	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
 		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
 	}
-	if (wc_HmacFinal(&hmac, &ct_buffer[SECRETS_HASH_LENGTH]) != 0) {
-		uart_write_str(UART0, "Couldn't compute hash");
+
+	passed = true;
+	//TODO: SIGNATURE CODE bruh
+	
+	// firmware + 1024 bytes message + metadata
+	uart_write_str(UART0, "Funny asymetric stuff\n");
+
+	// Set up ecc
+	if (wc_ed25519_init(&ed25519)) {
+		uart_write_str(UART0, "No memory for ed25519 key :(\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
-	passed = true;
-	for (int i = 0; i < SECRETS_HASH_LENGTH; i++) {
-		if (ct_buffer[i] != ct_buffer[SECRETS_HASH_LENGTH + i]) {
-			passed = false;
-		}
+
+	// Import a key
+	if (wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) {
+		uart_write_str(UART0, "Can't init a key smfh\n");
+		while (UARTBusy(UART0_BASE)) {}
+		SysCtlReset();
 	}
+
+	uart_write_str(UART0, "hey look I have funny ecc key now lmao\n");
+
+	package_size = vault.fw_length + FLASH_PAGESIZE + sizeof(metadata_blob) - SECRETS_IV_LEN;
+	// Padding
+	package_size += SECRETS_ENCRYPTION_BLOCK_LENGTH - (package_size % SECRETS_ENCRYPTION_BLOCK_LENGTH);
+
+	addr = (start_block << 10) + FLASH_PAGESIZE - sizeof(metadata_blob) + SECRETS_IV_LEN;
+
+	if (wc_ed25519_verify_msg(ct_buffer, SECRETS_SIGNATURE_LENGTH, (uint8_t *) addr, package_size, (int *) &passed, &ed25519)) {
+		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+	uart_write_str(UART0, "Finished!\n");
+
 	if (passed) {
 		uart_write_str(UART0, "omg you are pro gamer!!!!\n");
 	} else {
 		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 	addr = (start_block + flash_block_offset) << 10;
-	program_flash((void *) addr, ct_buffer, SECRETS_HASH_LENGTH);
+
+	program_flash((void *) addr, ct_buffer, SECRETS_SIGNATURE_LENGTH);
 
 	// Store new vault
 	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
@@ -393,9 +422,14 @@ void boot_firmware(){
 	metadata_blob decrypted_metadata;
 	uint8_t *m_addr;
     uint32_t addr;
-
-	// Decryption cipher
+	uint32_t boot_size;
+	uint32_t total_size;
+	uint32_t blocks;
+	uint8_t* sig_addr;
+	uint8_t* start_addr;
+						// Decryption cipher
 	Aes aes;
+	ed25519_key ed25519;
 
 	uart_write_str(UART0, "B");
     uart_write_str(UART0, "Booting firmware...\n");
@@ -443,11 +477,13 @@ void boot_firmware(){
 
 		case STORAGE_TRUST_NONE:
 			uart_write_str(UART0, "No fw in installed, plese update\n");
+			while(UARTBusy(UART0_BASE)){}
 			SysCtlReset();
 			return;
 
 		default:
             uart_write_str(UART0, "Unknown trust state\n");
+			while(UARTBusy(UART0_BASE)){}
             SysCtlReset();
             return;
 	}
@@ -500,6 +536,7 @@ void boot_firmware(){
 
 	if((boot_fwversion != vault_version) && (boot_fwversion != 0)){
 		uart_write_str(UART0, "The version did not check out\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 
 	}
@@ -508,26 +545,50 @@ void boot_firmware(){
 	passed = verify_hmac((uint8_t *) &decrypted_metadata.metadata, sizeof(decrypted_metadata.metadata), secrets.hmac_key, decrypted_metadata.hmac);
 	if (!passed) {
 		uart_write_str(UART0, "Metadata wtf\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+	// Setup public keys
+
+	if (wc_ed25519_init(&ed25519)) {
+		uart_write_str(UART0, "No memory for ed25519 key :(\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
+	// Import a key
+	if (wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) {
+		uart_write_str(UART0, "Can't init a key smfh\n");
+		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
 	}
 
 	// Verify hmac signature of all data on boot
-	uint32_t boot_size = decrypted_metadata.metadata.fw_length;
+	boot_size = decrypted_metadata.metadata.fw_length;
 	//pad boot_size
 	boot_size += SECRETS_ENCRYPTION_BLOCK_LENGTH - (boot_size % SECRETS_ENCRYPTION_BLOCK_LENGTH);
-	uint32_t blocks = boot_size >> 10;
+	blocks = boot_size >> 10;
 	if (boot_size % FLASH_PAGESIZE) {
 		blocks += 1;
 	}
-	uint8_t* expected_hmac = addr + (uint8_t *) (blocks << 10);
-	uint8_t* start_addr = (uint8_t*) mb + sizeof(mb->iv);
 
+	sig_addr = addr + (uint8_t *) (blocks << 10);
+	start_addr = (uint8_t*) mb + sizeof(mb->iv);
 	//metadata size + message size + firmware size
-	passed = verify_hmac((uint8_t *) start_addr, boot_size + FLASH_PAGESIZE + sizeof(decrypted_metadata) - sizeof(decrypted_metadata.iv), secrets.hmac_key, (uint8_t *) expected_hmac);
+	total_size = boot_size + FLASH_PAGESIZE + sizeof(decrypted_metadata) - sizeof(decrypted_metadata.iv);
+
+	if (wc_ed25519_verify_msg(sig_addr, SECRETS_SIGNATURE_LENGTH, (uint8_t *) start_addr, total_size, (int *) &passed, &ed25519)) {
+		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
+		while(UARTBusy(UART0_BASE)){}
+		SysCtlReset();
+	}
+
 
 	// FLOW CHART: metadata signature good?
 	if (!passed) {
-		uart_write_str(UART0, "HMAC signature does not match on boot:bangbang:\n");
+		uart_write_str(UART0, "signature does not match on boot:bangbang:\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
@@ -584,17 +645,20 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 
     if (wc_HmacSetKey(&hmac, WC_SHA256, key, SECRETS_HMAC_KEY_LEN) != 0) {
         uart_write_str(UART0, "Couldn't init HMAC");
+		while(UARTBusy(UART0_BASE)){}
         SysCtlReset();
 }
 
     if( wc_HmacUpdate(&hmac, data, data_len) != 0) {
     uart_write_str(UART0, "Couldn't init HMAC");
+	while(UARTBusy(UART0_BASE)){}
     SysCtlReset();
 }
 
     uint8_t hash[SECRETS_HASH_LENGTH]; // 256/8 = 32
     if (wc_HmacFinal(&hmac, hash) != 0) {
         uart_write_str(UART0, "Couldn't compute hash");
+		while(UARTBusy(UART0_BASE)){}
         SysCtlReset();
 	}
 	bool ret = true;
@@ -604,4 +668,11 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 		}
 	}
 	return ret;
+}
+
+
+unsigned int my_rng_seed_gen(void) {
+	uart_write_str(UART0, "RNG IS BEING USED OH NO THIS IS BAD\n");
+	return 4;	// chosen by fair dice roll
+				// guaranteed to be random
 }

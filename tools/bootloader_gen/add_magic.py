@@ -13,10 +13,9 @@ inf = sys.argv[1]
 of = sys.argv[2]
 
 with open(inf, 'r') as f:
-    vault_key = bytes.fromhex(f.readline())
     decrypt_key = bytes.fromhex(f.readline())
     hmac_key = bytes.fromhex(f.readline())
-data = vault_key + decrypt_key + hmac_key
+data = decrypt_key + hmac_key
 
 with open(of, 'wb') as f:
     payload = bytestring + data

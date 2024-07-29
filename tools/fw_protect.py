@@ -10,6 +10,10 @@ from pwn import *
 from Crypto.Hash import HMAC, SHA256
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import AES
+from Crypto.PublicKey import ECC
+from Crypto.Signature import eddsa
+from Crypto.Util.asn1 import DerSequence, DerInteger
+
 import struct
 
 DEFAULT_SECRETS="./secret_build_output.txt"
@@ -24,9 +28,11 @@ def protect_firmware(infile, outfile, version, message, secrets):
     firmware_padded = pad(firmware, 16)
 
     with open(secrets, 'r') as f:
-        vault_key = bytes.fromhex(f.readline())
         encrypt_key = bytes.fromhex(f.readline())
         hmac_key = bytes.fromhex(f.readline())
+        ecc_data = bytes.fromhex(f.readline())
+
+        ecc_key = ECC.import_key(ecc_data)
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
 
@@ -46,16 +52,18 @@ def protect_firmware(infile, outfile, version, message, secrets):
     to_encrypt = metadata + metadata_hmac + m_pad + firmware_padded
     cipher = AES.new(encrypt_key, AES.MODE_CTR)
     iv = cipher.nonce + b'\x00' * 8
-    print(iv)
+    #print(iv)
 
     encrypted_blob = cipher.encrypt(to_encrypt)
-    hmac_obj = HMAC.new(hmac_key, digestmod=SHA256) 
-    hmac_obj.update(encrypted_blob)
-    signature = hmac_obj.digest()
+
+    signer = eddsa.new(ecc_key, 'rfc8032')
+    signature = signer.sign(encrypted_blob)
+
+    print(signature.hex())
+    print(len(signature))
 
     #signature gets sent in at the end in seperate block
-    firmware_blob = signature + iv + encrypted_blob
-
+    firmware_blob = p16(len(signature), endian='little') + signature + iv + encrypted_blob
 
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:
