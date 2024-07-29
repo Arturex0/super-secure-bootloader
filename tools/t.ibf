@@ -1,0 +1,126 @@
++>>+++++
+
+
+[
+    -
+    [
+        -<
+    ]
+    
+    >
+]
+
+<<
+
+[
+    ->
+]
+
+
+
+[1][0][0][0]
+
+
+[N][R][R]
+
+
+5 / 2 
+
+[
+    >+
+]  
+
+
+
+
+
+
+[TMP1] [TMP2] [NUM1] [RES] [0] [N] [0] [INDEX] [BIT7] [BIT6] [BIT5] [BIT4] [BIT3] [BIT2] [BIT1] [BIT0] 
+
+
+
+1. perform module opertion on N by 2
+2. copy the remainder from RES to INDEX^
+3. perform division by 2 on N
+
+3
+
+[
+
+
+#devider script 
+
+
+
+[TMP1] [NUNM1] [B1] [B2] [RES] [0] [N] [0] [INDEX] [BIT7] [BIT6] [BIT5] [BIT4] [BIT3] [BIT2] [BIT1] [BIT0] 
+
+
+
+
+[
+    1. copy number to N using tmp1
+    2. run mod algo
+
+    [
+        0>>>>+ #increse B2 by one
+        <- # decrese B1 by 1
+        >>- # decrese the result to 0  
+    ]
+
+    0>>>+ #increse B1 by 1
+    <-
+]
+
+
+
+>>
+
+[   # copy number n1 to N mod input and tmp1
+    [
+        >>>>>+
+        0+
+        >>-
+    ]
+
+    #copy from tmp1 to N
+
+    [
+
+    ]
+    
+]
+
+
+deivision value will be stored in reister B1
+
+
+[
+    1. Do mod
+    2. move ponter to RES
+
+    [
+        add 1 to B2
+        res --
+        b1--
+    ]
+
+    b1 ++
+
+    n--
+] 
+
+
+
+
+
+
+6 
+
+1. 6 % 2 == 0
+2. 6 / 2 = 3 
+3  3 % 2 == 1
+4. 3 / 2 = 1
+5. 1 % 1 == 1
+6  1 / 2 == 0 
+
+

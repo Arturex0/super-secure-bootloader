@@ -1,0 +1,1031 @@
+
+# shift all values to the right by 1
+0
+[
+[>]
+<
+[>+<-]
+0
+]
+++++++ # this sets up the number of spaces to move to the right
+[[
+    [>]
+    <
+    [>+<-]
+    0
+
+]
+ >
+    [<+>-]
+    +  
+    <
+    -
+    
+]
+
+>>>>>>
+[-<]
+
+
+# preload values
+>>>>++++
+>++++
+
+#mov val 1 to tmp
+
+>>>
+[<<+>>-]
+
+
+
+
+# goto adress to copy  
+0>>>>>^
+[
+    0>>>>^+
+    0>>>>>^-
+]
+
+
+#update values
+
+0>>>>+>++
+
+0
+# main loop starts here:
+
+
+#code for fun swap fixing 
+
+# this is the begggining of the new loop pass
+
+>>>>>^
+
+[
+
+
+0
+
+
+> 
+
+[
+    >^
+    [>+<-]
+    0
+    >>-
+    <-
+]
+
+
+#standard copy code
+
+# goto adress to copy  
+0>>>>>^
+[
+    0>>>>^+
+    0>>>>>^-
+]
+
+
+
+update values
+
+0>>[-]>+>+>++
+
+
+
+
+
+# copy val from jmp2 to TEMP and JMP0
+
+[
+
+0+>>+
+>>>-
+
+]
+
+#copy val from TMP back to JMP2
+
+0
+
+[
+    >>>>>+
+    0-
+]
+
+
+#copy val from ct1 to ct0 and tmp
+
+>>>
+[
+    0+
+    >+
+    >>-
+
+]
+
+
+# copy val from tmp to ct1
+
+0
+
+[
+    >>>+
+    0-
+]
+
+
+
+
+>>>>>^
+
+
+
+]
+
+
+
+0
+
+
+>
+
+[
+    >^
+    [>+<-]
+    0
+    >>-
+    <-
+]
+
+
+0>>>>>>
+
+
+[
+
+    0>>^>+
+    0>>>>>>-
+
+]
+
+
+# clean up
+
+
+0 >>>[-]>[-]>[-]
+
+
+
+
+# move keys to their appropreiate possitions
+
+#key2
+
+0 >>^[>]>>[>]<
+
+
+[
+    0>>>>+
+    >>>[>]>>[>]<-
+]
+
+
+#key1
+
+0>>^[>]>>[>]<
+
+
+[
+    0>>>+
+    >>>>[>]>>[>]<-
+]
+
+
+0
+
+
+>>^>
+
+[
+    [>]
+    <
+    [>+<-]
+    0>>^>
+]
+
+
+
+
+#goto loop begginin
+0>>>>>^>>
+
+
+[
+    
+    0>>>>>      #[-] #clear index 2 (unnidex i think)
+    
+    [
+        >+0+
+        >>>>>-
+    ]
+
+    # take value from TMP1 and add it to INDEX AND INDEX2
+
+    0
+    [
+        >>>>>+>+
+        0-
+    ]
+
+    # move key1 to TMP1 and TMP2
+
+
+    >>>
+
+    [
+        0+
+        >+
+        >>-
+    ]
+
+    #move TMP2 to key2
+
+    0>
+
+    [
+        >>+
+        <<-
+    ]
+
+
+    #sub TMP1 from enc
+
+    0
+
+    [
+        >>>>>^>>-
+        0-
+    ] 
+
+
+    #sub index2 from enc
+
+    >>>>>>
+
+    [
+        <^>>-
+        0>>>>>>-
+    ]
+
+    # add 1 to index 
+
+    <+
+
+    #jump to that index 
+
+    ^>>
+
+
+    
+
+]
+
+
+0>
+++++++++++++++++++++ #set the number of mov to the right (26)
+
+
+
+[
+    >>>>>>[>]>[>]<
+    [
+
+    [
+        >+<-
+    ]
+
+    <
+
+    ]
+
+    0>>>>>>>[>]<
+
+    [
+        [>+<-]
+        <
+    ]
+
+    >+
+    0>-
+
+]
+
+
+>>>>>>[>]>>
+
+[
+    [>]<
+    [
+    [>+<-]
+    <
+    ]
+
+    0>>>>>>>[>]>>
+
+]
+
+
+
+#clean up the left side
+
+
+0>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+[
+    -<
+]
+
+<<
+
+#mov keys
+
+[
+    >>>>>>>>>>>>>>>>>>>>>+
+    <<<<<<<<<<<<<<<<<<<<<-
+]
+
+> [-]
+<<[-]
+<[-]
+
+>>>>>>>>>>>>>>>>>>>>>>>>>[>]>^>>
+
+
+
+[
+    #take the index and move it to TMP1
+    0>>>>>>>>>>>>>>>>>>>>>>>>>>>[>]>
+    [
+        0+
+        >>>>>>>>>>>>>>>>>>>>>>>>>>>[>]>-
+    ]
+
+
+    #move index from tmp1 to index and index2
+
+    0
+
+    [
+        >>>>>>>>>>>>>>>>>>>>>>>>>>>[>]>+>++
+        0-
+    ]
+
+    #move key to tmp1
+
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    [
+        0+
+        >>>>>>>>>>>>>>>>>>>>>>>>>-
+    ]
+
+    #mov key to num1 and key
+
+    0
+    [
+        >+
+        >>>>>>>>>>>>>>>>>>>>>>>>+
+        0-
+    ]
+
+    #copy index to to num
+
+    >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+    [>]>>
+
+    [
+        0>+
+        >>>>>>>>>>>>>>>>>>>>>>>>>>[>]>>-
+    ]
+
+    0>+
+
+
+    #setup index for distribution
+
+    >>>>>>>
+
+    ++++++++++++++++
+
+    0
+
+    #run dec to bin algo
+
+
+
+
+
+
+
+
+# [TMP1] [NUNM1] [B1] [B2] [RES] [0] [N] [0] [INDEX] [BIT7] [BIT6] [BIT5] [BIT4] [BIT3] [BIT2] [BIT1] [BIT0] 
+
+
+
+
+>
+
+
+ [
+
+
+# 2. copy val from NUM1 to N and TMP0
+
+[
+    >>>>>+
+    <<<<<<+
+    >-
+]
+
+# 3. copy val from tmp1 to NUM1 
+
+<
+
+[
+    >+<-
+]
+
+
+# goto mod pointer and set res to 1 for
+
+>>>>+>>
+
+# run mod / 2 algo 
+
+[-[-<]>]<<[->]
+
+0 
+
+# copy value from res to INDEX^
+
+>>>>
+
+[
+    >>>>^+
+    0>>>>-
+]
+# decrese indexx by 1 
+>>>>-
+
+
+0>
+
+#division
+[
+
+    # move num1 to N and to TMP1
+    [
+        >>>>>+
+        0+
+        >-
+    ]
+
+    #move TMP1 to N 
+
+    0
+
+    [>+<-]
+
+    #goto mod pointer and set RES
+
+    >>>>+>>
+
+    # run mod algo
+
+    [-[-<]>]<<[->]
+
+    # goto mod result 
+
+    0>>>>
+
+    [
+        0>>>+
+        <-
+        >>-
+    ]
+
+    0>>+
+
+    <-
+
+]
+
+# copy num from B1 to num1
+
+>
+[<+>-]
+
+# clear B2 
+
+>[-]
+
+<<
+
+
+]
+
+
+
+mov the encrypted bit to N
+
+0>>>>>>>>[-]++++++++>>>>>>>>>>>>>>>>>>>[>]>^>>
+
+
+[
+    0>+
+    >>>>>>>>>>>>>>>>>>>>>>>>>>[>]>^>>-
+]
+
+
+
+
+#run dec to bin alo 
+
+0
+
+
+
+
+
+
+
+
+# [TMP1] [NUNM1] [B1] [B2] [RES] [0] [N] [0] [INDEX] [BIT7] [BIT6] [BIT5] [BIT4] [BIT3] [BIT2] [BIT1] [BIT0] 
+
+
+
+
+>-
+
+
+
+
+ [
+
+
+# 2. copy val from NUM1 to N and TMP0
+
+[
+    >>>>>+
+    <<<<<<+
+    >-
+]
+
+# 3. copy val from tmp1 to NUM1 
+
+<
+
+[
+    >+<-
+]
+
+
+# goto mod pointer and set res to 1 for
+
+>>>>+>>
+
+# run mod / 2 algo 
+
+[-[-<]>]<<[->]
+
+0 
+
+# copy value from res to INDEX^
+
+>>>>
+
+[
+    >>>>^+
+    0>>>>-
+]
+# decrese indexx by 1 
+>>>>-
+
+
+0>
+
+#division
+[
+
+    # move num1 to N and to TMP1
+    [
+        >>>>>+
+        0+
+        >-
+    ]
+
+    #move TMP1 to N 
+
+    0
+
+    [>+<-]
+
+    #goto mod pointer and set RES
+
+    >>>>+>>
+
+    # run mod algo
+
+    [-[-<]>]<<[->]
+
+    # goto mod result 
+
+    0>>>>
+
+    [
+        0>>>+
+        <-
+        >>-
+    ]
+
+    0>>+
+
+    <-
+
+]
+
+# copy num from B1 to num1
+
+>
+[<+>-]
+
+# clear B2 
+
+>[-]
+
+<<
+
+
+]
+
+
+# next step XOR the numbers 
+
+0>>>>>>>
+
+++++++++ #i think it should be 8
+
+>[-]
++
+
+<
+[
+
+    #move num from first stage
+    >^
+    [
+        0>+
+        >>>>>>>^-
+    ]
+
+    0>>>>>>>>^>>>>>>>>
+
+    #mov num from second stage
+    [
+        0>+
+        >>>>>>>^>>>>>>>>-
+    ]
+
+    #run XOR algo
+
+    0>-
+
+    [
+    >-
+    <<
+    ]
+
+    0>>+
+
+    <[-]
+
+    >
+    #transfer result to BN
+
+    [
+        >>>>>>^+
+        0>>-
+    ]
+
+    >>>>>>+<-
+
+
+
+]
+
+
+++++++++>[-]+< #ptr
+
+
+[
+    >^
+    [
+
+        0>>>>>>>
+
+         #copy WAG to TMP1 and TMP3
+        [
+            <<+
+            <<+
+            >>>>-
+
+        ]
+
+        <<<<
+
+        #mov tmp1 to WAG
+
+        
+
+        [
+            >>>>+
+            <<<<-
+        ]
+
+        >+>-
+
+        [
+            <
+            [
+                <++
+                >-
+            ]
+            <
+            [>+<-]
+
+            >>-
+
+            
+        ]
+        
+        <
+
+        [
+            >>+
+            <<-
+        ]
+
+        0
+
+    ]
+
+    0
+    >>>>>>>->+<
+    
+]
+
+
+#move the number to its oriinal position
+
+0>>>>>>
+
+[
+    >>>>>>>>>>>>>>>>>>>>>[>]>^>>+
+    0>>>>>>-
+]
+
+
+#clean up
+
+0>>>>>>>>>>>>>>>>
+
+[-]<[-]<[-]<[-]<[-]<[-]<[-]<[-]<[-]
+
+>>>>>>>>>>>>>>>>>>>[>]>+^>>
+
+]
+
+
+0>>>>>>>>>>>>>>>>>>>>>>>>>[-]>>[>]>[-]>>
+
+
+
+#move 2 to the left
+
+
+    [
+    [<+>-]
+    >
+    ]
+    
+    <<
+    [<]
+    >
+
+    [
+    [<+>-]
+    >
+    ]
+
+
+0
++++++++++++++++++++++++++ #this is the number to move to the right
+
+
+
+[
+    ^>>
+    [[
+        <+>-
+    ]
+
+    >
+    ]
+
+    >
+
+    [
+        [<+>-]
+        >
+    ]
+
+    0-
+]
+
+
+#count the number in 1
+
+^>>
+
+[
+    0+
+    ^>>
+]
+
+0
+
+^>>^>
+
+[
+    0^>>+
+    ^>
+]
+
+
+
+#count the number in 2 
+
+#copy the number to tmp2
+
+0^>>
+
+[
+    0>+
+    <^>>-
+]
+
+
+#calculate the differance
+
+0>
+
+[<->-]
+
+#move last 2 spaces right
+
+>[>]>[>]<
+
+[
+    >>+
+    <<-
+]
+
+0
+
+# fix imparity 
+[
+    >>[>]>[>]>>
+    [<+>-]
+
+    #move last num from the back to back of last
+    0>>[>]<
+    [
+        >>[>]>>+
+        0>>[>]<-
+    ]
+
+    #move last to the left by 1
+
+    0>>[>]>>
+
+    [[
+        <+>-
+        
+    ]
+    >
+    ]
+
+    0-
+
+]
+
+>>>
+
+[
+    #find last num and move to the right
+    [>]<
+
+    [
+        >>[>]>+
+        <<[<]<-
+    ]
+
+    #move last num from total to the right 
+
+    >>[>]<
+    [>+<-]
+
+    #move last nums in roup 1 to the left by 1
+
+    <[<]>
+
+    [
+        [<+>-]
+        >
+    ]
+
+    0>>>
+]
+
+
+# move all the last nums to the left by 3
+
+>>>
+
+[
+    [<+>-]
+    >
+]
+
+0>>>>>
+
+[
+    [<+>-]
+    >
+]
+
+0>>>>
+
+[
+    [<+>-]
+    >
+]
+
+#move all nums to the left by 2
+
+0>>
+
+[
+    [<+>-]>
+]
+
+0>
+
+[
+    [<+>-]>
+]
+
+#make it look: [0] [0] [VAL] [VAL] [VAL] [0] [VAL] [VAL] [VAL] 
+
+
+
+
+#main great calculation beins:
+
+
+
+# [TMP1] [NUNM1] [B1] [TMP1] [TMP2] [TMP3] [RESULT] [7] [INDEX] [B1] [B2] [B3] [B4] [B5] [B6] [B7] [B8] [B1] [B2] [B3] [B4] [B5] [B6] [B7] [B8][KEY] [INDEX] [INDEX21] [NUM1] [NUM2] [NUM3] [NUM4] [NUM5] [NUM6] [NUM7] [NUM8] [NUM9] [NUM10]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

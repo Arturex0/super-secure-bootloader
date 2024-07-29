@@ -1,0 +1,114 @@
+
+
+
+
+
+
+
+# [TMP1] [NUNM1] [B1] [B2] [RES] [0] [N] [0] [INDEX] [BIT7] [BIT6] [BIT5] [BIT4] [BIT3] [BIT2] [BIT1] [BIT0] 
+
+
+
+
+>
+
+
+ [
+
+
+# 2. copy val from NUM1 to N and TMP0
+
+[
+    >>>>>+
+    <<<<<<+
+    >-
+]
+
+# 3. copy val from tmp1 to NUM1 
+
+<
+
+[
+    >+<-
+]
+
+
+# goto mod pointer and set res to 1 for
+
+>>>>+>>
+
+# run mod / 2 algo 
+
+[-[-<]>]<<[->]
+
+0 
+
+# copy value from res to INDEX^
+
+>>>>
+
+[
+    >>>>^+
+    0>>>>-
+]
+# decrese indexx by 1 
+>>>>-
+
+
+0>
+
+#division
+[
+
+    # move num1 to N and to TMP1
+    [
+        >>>>>+
+        0+
+        >-
+    ]
+
+    #move TMP1 to N 
+
+    0
+
+    [>+<-]
+
+    #goto mod pointer and set RES
+
+    >>>>+>>
+
+    # run mod algo
+
+    [-[-<]>]<<[->]
+
+    # goto mod result 
+
+    0>>>>
+
+    [
+        0>>>+
+        <-
+        >>-
+    ]
+
+    0>>+
+
+    <-
+
+]
+
+# copy num from B1 to num1
+
+>
+[<+>-]
+
+# clear B2 
+
+>[-]
+
+<<
+
+
+]
+
+ 

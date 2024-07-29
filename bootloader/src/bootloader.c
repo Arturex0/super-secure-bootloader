@@ -56,13 +56,20 @@ int main(void) {
 	// Initialze the serail port
     initialize_uarts();
 
-	if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
+	// if ((HWREG(0x400FE1D0) & 0x00000003) != 0) {
 
-		HWREG(0x400FD000) = 0x75100000;
-   		HWREG(0x400FD004) = HWREG(0x400FE1D0) & 0x7FFFFFFC;
-    	HWREG(0x400FD008) = 0xA4420000 |  0x00000008;
+	// 	HWREG(0x400FD000) = 0x75100000;
+   	// 	HWREG(0x400FD004) = HWREG(0x400FE1D0) & 0x7FFFFFFC;
+    // 	HWREG(0x400FD008) = 0xA4420000 |  0x00000008;
 
-	}
+	// }
+
+	HWREG(FLASH_FMPRE0) = 0xFFFFFFFF;
+	HWREG(FLASH_FMPPE0) = 0xFFFFFFFF;
+
+	// Disable the debug interface by writing to the FMD and FMC registers
+	HWREG(FLASH_FMD) = 0xA4420004;
+	HWREG(FLASH_FMC) = FLASH_FMC_WRKEY | FLASH_FMC_COMT;
 
 	uint32_t eeprom_status;
 
@@ -371,7 +378,7 @@ void update_firmware(void) {
 	}
 
 
-	uart_write_str(UART0, "A");
+	uart_write_str(UART0, "P");
 	// can shorten this but it needs to not be so short that the string isn't written
 
 	// wait for UART to finish
@@ -434,7 +441,7 @@ void boot_firmware(){
 			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
 			//Calculate the fw address
-			addr = (STORAGE_PARTB + 2) << 10;
+			addr = (STORAGE_PARTB + 2) << 1;
 			break;
 
 		case STORAGE_TRUST_NONE:
@@ -500,7 +507,7 @@ void boot_firmware(){
 	// VERY DANGEROUS
 	// Do not use globals after this function is called
 	copy_fw_to_ram((uint32_t *) addr, \
-			(uint32_t *) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
+			(uint32_t) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
 	
 	jump_to_fw(0x20000001, 0x20007FF0);
 
