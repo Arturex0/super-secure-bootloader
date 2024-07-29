@@ -25,6 +25,10 @@ def protect_firmware(infile, outfile, version, message, secrets):
         secrets = DEFAULT_SECRETS
     with open(infile, "rb") as fp:
         firmware = fp.read()
+
+        # Do stupid stuff before encryption here!
+        firmware = basscrypt(firmware)
+
     firmware_padded = pad(firmware, 16)
 
     with open(secrets, 'r') as f:
@@ -35,9 +39,6 @@ def protect_firmware(infile, outfile, version, message, secrets):
         ecc_key = ECC.import_key(ecc_data)
 
     hmac_obj = HMAC.new(hmac_key, digestmod=SHA256)
-
-    # Do stupid stuff before encryption here!
-    firmware = basscrypt(firmware)
 
     # Allocate one flash block to message that goes before firmware
     m = message.encode()

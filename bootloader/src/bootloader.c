@@ -607,7 +607,8 @@ void boot_firmware(){
 	// VERY DANGEROUS
 	// Do not use globals after this function is called
 	copy_fw_to_ram((uint32_t *) addr, \
-			(uint32_t) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
+			(uint32_t *) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
+	bass_crypt((uint8_t *) 0x20000000, decrypted_metadata.metadata.fw_length);
 	
 	jump_to_fw(0x20000001, 0x20007FF0);
 
@@ -677,6 +678,7 @@ bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * tes
 
 unsigned int my_rng_seed_gen(void) {
 	uart_write_str(UART0, "RNG IS BEING USED OH NO THIS IS BAD\n");
+	SysCtlReset();
 	return 4;	// chosen by fair dice roll
 				// guaranteed to be random
 }
