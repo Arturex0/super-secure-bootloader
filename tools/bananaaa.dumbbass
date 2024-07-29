@@ -1,0 +1,56 @@
+<init>
+
+imm ra 0		;store "bananaaa" into memory starting at 0
+imm rb 1
+
+imm rc 98		; 'b'
+stm ra rc
+add ra rb
+
+imm rc 97		; 'a'
+stm ra rc
+add ra rb
+
+imm rc 110		; 'n'
+stm ra rc
+add ra rb
+
+imm rc 97		; 'a'
+stm ra rc
+add ra rb
+
+imm rc 110		; 'n'
+stm ra rc
+add ra rb
+
+imm rc 97		; 'a'
+stm ra rc
+add ra rb
+
+imm rc 97		; 'a'
+stm ra rc
+add ra rb
+
+imm rc 97		; 'a'
+stm ra rc
+
+<encrypt_setup>
+imm rc 0		;rc -> offset into key
+
+<encrypt>
+
+imm ra sr
+sys 00 00		;read to ra		(get ciphertext)
+
+ldm rb rc		;rb = *rc		(get key)
+xor rb ra		;rb ^= ra		(computer ct)
+
+imm ra sw
+sys 00 00		;write rb
+
+imm ra 01
+imm rb 07		;0b00000111
+add rc ra		;rc += 1
+and rc rb		;rc &= 7 (basically reset counter)
+
+jmp <encrypt> 0

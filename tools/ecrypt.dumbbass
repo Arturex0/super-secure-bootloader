@@ -1,0 +1,14 @@
+<start>
+imm rc 42	;xor with 42
+
+<loop>
+imm ra sr	;sys_read
+sys 00 00			
+
+xor ra rc	;xor ra with 42
+mov rb ra	;store result in rb
+imm ra sw	;sys_write
+sys 00 00	;write rb into buffer
+
+jmp <loop> 0
+
