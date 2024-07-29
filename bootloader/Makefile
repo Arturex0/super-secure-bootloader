@@ -60,6 +60,7 @@ bootloader: src/startup_gcc.o
 bootloader: src/secret_partition.o
 bootloader: src/butils.o
 bootloader: src/computer.o
+bootloader: src/bass.o
 
 bootloader:
 	mkdir -p bin
