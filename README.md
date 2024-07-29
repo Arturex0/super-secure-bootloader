@@ -1,31 +1,30 @@
-# Cryptographic Automotive Software Handler and Bootloader (CrASHBoot)
+# Super Secure Bootloader
 
-Installation and development guide for the most secure (TM) automotive bootloader on the planet! We guarentee that cars running our software will be unhackable (provided hacking is not attempted). Of all the automotive bootloaders, this is certainly one of them. Read on and tremble at our embedded security skillz.
-
-### Internal Notes
-
-```
-//TODO: Make the design secure
-//TODO: Hire interns
-//TODO: Delete TODOs before publishing
-```
-
-I find myself trapped in the labyrinthine depths of my company, shackled by an unending torrent of menial tasks. My desk has become my prison, my workload, my jailer. I am buried under a mountain of code, my skills squandered on trivialities while critical applications do not get the attention they deserve. In a desperate attempt to keep up with the workload, I've had to rapidly create a functional, yet insecure, product. It's a risky move, one that fills me with dread. I haven't had the time to implement the necessary security goals of confidentiality, integrity, and authentication. If you are reading this: I implore you, proceed with caution. **Do not release this software.** It is potentially riddled with vulnerabilities and exposed to the most basic types of attacks. 
-
-Please, send help. I need to escape this relentless cycle. I need a team of talented interns to tackle this challenge. Otherwise, I fear the worst.
-
-### External Notes
-
-Ship it!
+Installation and development guide for SSB
 
 # Project Structure
+
 ```
 ├── bootloader *
 │   ├── bin
 │   │   ├── bootloader.bin
 │   ├── src
 │   │   ├── bootloader.c
+│   │   ├── bass.c
+│   │   ├── butils.c
+│   │   ├── computer.c.c
+│   │   ├── secret_partition.c
 │   │   ├── startup_gcc.c
+│   ├── inc
+│   │   ├── bass.h
+│   │   ├── bootloader.h
+│   │   ├── butils.h
+│   │   ├── computer.h
+│   │   ├── metadata.h
+│   │   ├── secret_partition.h
+│   │   ├── secrets.h
+│   │   ├── storage.h
+│   │   ├── user_settings.h
 │   ├── bootloader.ld
 │   ├── Makefile
 ├── firmware
@@ -38,20 +37,103 @@ Ship it!
 │   ├── inc
 │   ├── uart
 ├── tools *
+│   ├── bassembler.py
 │   ├── bl_build.py
 │   ├── fw_protect.py
 │   ├── fw_update.py
+│   ├── make_firmwares.sh
 │   ├── util.py
+│   ├── *.dumbbass
+│   ├── bootloader_gen
+│   │   ├── add_magic.py
+│   │   ├── add_secrets.py
 ├── README.md
 
 Directories marked with * are part of the CrASHBoot system
 ```
 
-## Bootloader
+## Security Overview ##
 
-The `bootloader` directory contains source code that is compiled and loaded onto the TM4C microcontroller. The bootloader manages which firmware can be updated to the TM4C. When connected to the fw_update tool, the bootloader checks the version of the new firmware against the internal firmware version before accepting the new firmware.
 
-The bootloader will also start the execution of the loaded vehicle firmware.
+### Formats ###
+
+Our protected firmware has the following format:
+
+```
+| Length of signature | Signature | IV | Encrypted data ( Metadata + Message + Firmware) |
+```
+
+The message is always padded to be 1024 in order to occupy a block of flash
+
+Our data is encrypted using `AES-CTR` and validated using `ec25519`
+
+Furthermore, our metadata has the following format:
+
+```
+| fw_version | fw_length | message_length | unused padding | HMAC |
+```
+
+### Partitions ###
+
+Our bootloader reserves two regions of flash called partitions to store firmware in. This way, one partition can contain verified firmware that is
+safe to boot from while another serves as a temporary holding area for new firmware from the updater.
+
+The blocks that the partitions occupy in flash are defined as `STORAGE_PARTA` and `STORAGE_PARTB` in `storage.h`, their sizes are defined s `STORAGE_PART_SIZE`
+
+### Vaults and EEPROM ###
+
+The vault contains information about the currently loaded firmware image. It contains a variable that indicates which partition to boot from, along
+with metadata about the firmware in that partition. The vault is initialized to firmware version 1 and trusting neither partitions.
+
+The vault is stored in an EEPROM block along with keys to perform decryption of firmware and HMAC verification. The public key for ec25519 verification
+is stored in flash instead.
+
+The struct for the vault is defined as `vault_struct` in `storage.h`
+
+The struct for the secrets is defined as `secrets_struct` in `secrets.h`
+
+### Moving keys from flash ###
+
+To store keys in EEPROM, the bootloader is first padded to a known length that is a multiple of the flash page size. A chunk of data containing a magic
+number and some secret keys are then appended to the image. After flashing the bootloader onto the board, startup code checks for a magic number at this
+block. If the magic is found, the bootloader resets the vault, erases and store keys into EEPROM, and erases flash.
+
+The magic number and block to look for are defined as `SECRETS_MAGIC_INDICATOR` and `SECRETS_BLOCK` respectively in `secret_partition.h`
+
+The code that checks for these secrets at startup is `setup_secrets` in `secret_partition.c`
+
+### Updating ###
+
+When updating, the updater sends a `U` and waits for a `U` back from the bootloader, it then uses the following frame format
+
+```
+| Frame byte ('F') | Data Length (2 bytes) | Data |
+```
+
+and waits for an acknowledgement byte back from the bootloader ('A')
+
+The updater starts by sending in a frame containing encrypted metadata, the bootloader verfies if the length of the frame is correct
+and decrypts it, verifying the HMAC signature. If this succeeds, the bootloader will compare the version of this metadata chunk with the
+old version stored in the vault. If the version is satisfactory (version >= old version), the bootloader stores the metadata into flash and continues.
+
+The updater must then send in as many frames of data length 1024 containing encrypted data as it can, sending in a partial frame containing
+the remaining data if the data size is not a multiple of 1024. The bootloader does no verification on these in this step and simply stores
+them into flash, unless it finds that no space in flash is remaining.
+
+When the updater is finished sending the data, it must send in a frame with the data length set to zero containing the signature. The bootloader
+will take this signature and store the data it has received. If this data is valid, it will change the vault settings to boot from the new partition, along
+with storing metadata information.
+
+Metadata data structures are defined in `metadata.h`
+
+Frame code is handled by `fw_update.py` on the updater's side and the function `read_frame` in `butils.c` on the bootloader's side
+
+### Booting ###
+
+On boot, the bootloader verifies the metadata of the firmware stored in the partition matches that stored in the vault. The bootloader will also verify
+the ed25119 signature before going on.
+
+The bootloader will then decrypt the release message and print it out, before decrypting the firmware into RAM and executing it.
 
 ## Tools
 
@@ -64,10 +146,15 @@ There are three python scripts in the `tools` directory which are used to:
 ### bl_build.py
 
 This script calls `make` in the `bootloader` directory.
+It also generates an AES and HMAC key, along with an ed25119 private key public key pair. The public key is made available to the bootloader in the form
+of a header file called `public.h`
+
+When the bootloader is created, the script will call `make` in the `bootloader_gen` directory to pad the bootloader and add secrets to it.
 
 ### fw_protect.py
 
 This script bundles the version and release message with the firmware binary.
+It also encrypts the firmware and adds signatures to it.
 
 ### fw_update.py
 
@@ -85,7 +172,7 @@ python bl_build.py
 2. Flash the bootloader using `lm4flash` tool
    
 ```
-sudo lm4flash ../bootloader/bin/bootloader.bin
+sudo lm4flash bootloader_gen/bl_ready.bin
 ```
 
 # Bundling and Updating Firmware
@@ -114,7 +201,7 @@ This creates a firmware bundle called `firmware_protected.bin` in the tools dire
 python fw_update.py --firmware ./firmware_protected.bin
 ```
 
-If the firmware bundle is accepted by the bootloader, the `fw_update.py` tool will report it wrote all frames successfully.
+If the firmware bundle is accepted by the bootloader, the `fw_update.py` tool will exit
 
 Additional firmwares can be updated by repeating steps 3 and 4, but only firmware versions higher than the one flashed to the board (or version 0) will be accepted.
 
@@ -154,5 +241,3 @@ list main
 break bootloader.c:50
 ```
 
-Copyright 2024 The MITRE Corporation. ALL RIGHTS RESERVED <br>
-Approved for public release. Distribution unlimited 23-02181-25.
