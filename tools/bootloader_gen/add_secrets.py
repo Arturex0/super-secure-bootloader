@@ -1,8 +1,8 @@
 import argparse
 
 BLOCK_SIZE = 1024
-#reserve block 56
-RESERVED_BLOCK = 56
+#reserve block 100
+RESERVED_BLOCK = 100
 
 def pad(infile, contentfile, outfile, reserved_block):
     with open(infile, 'rb') as f:
