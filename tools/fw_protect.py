@@ -25,6 +25,10 @@ def protect_firmware(infile, outfile, version, message, secrets):
         secrets = DEFAULT_SECRETS
     with open(infile, "rb") as fp:
         firmware = fp.read()
+
+        # Do stupid stuff before encryption here!
+        firmware = basscrypt(firmware)
+
     firmware_padded = pad(firmware, 16)
 
     with open(secrets, 'r') as f:
@@ -68,6 +72,14 @@ def protect_firmware(infile, outfile, version, message, secrets):
     # Write firmware blob to outfile
     with open(outfile, "wb+") as outfile:
         outfile.write(firmware_blob)
+
+def basscrypt(stuff):
+    key = b'bananaaa'
+    r = b''
+    for i in range(len(stuff)):
+        e = stuff[i] ^ key[i % 8]
+        r += int.to_bytes(e)
+    return bytes(r)
 
 
 if __name__ == "__main__":
