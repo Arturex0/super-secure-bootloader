@@ -378,9 +378,6 @@ void update_firmware(void) {
 
 	addr = (start_block << 10) + FLASH_PAGESIZE - sizeof(metadata_blob) + SECRETS_IV_LEN;
 
-	uart_write_hex(UART0, package_size);
-	uart_write_hex(UART0, addr);
-
 	if (wc_ed25519_verify_msg(ct_buffer, SECRETS_SIGNATURE_LENGTH, (uint8_t *) addr, package_size, (int *) &passed, &ed25519)) {
 		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
 		while(UARTBusy(UART0_BASE)){}
