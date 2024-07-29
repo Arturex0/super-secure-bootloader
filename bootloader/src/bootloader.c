@@ -126,7 +126,6 @@ void update_firmware(void) {
 	// EEPROM/flash results
 	int result = 0;
 	uint32_t size; 						// frame size read in
-	uint16_t signature_length;			// Signature read in
 	uint32_t package_size;				// Calculate size of package for verification
 
 	uint32_t old_version;			 	// version of current firmware
@@ -143,7 +142,6 @@ void update_firmware(void) {
 	bool ending = false; 				// did we receive a < BUFFER_LENGTH size when reading in firmware?
 
 										// Useful crypto stuff
-	wc_Sha256 hash;
 	Aes aes;
 	ed25519_key ed25519;
 
@@ -155,10 +153,8 @@ void update_firmware(void) {
 	}
 
 	// Import a key
-	uint32_t edr;
-	if ((edr = wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) != 0) {
+	if (wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
-		uart_write_hex(UART0, edr);
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
 	}
@@ -172,14 +168,9 @@ void update_firmware(void) {
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 
-	// set up hash
-	if (wc_InitSha256(&hash)) {
-		uart_write_str(UART0, "sha256 skill issue\n");
-		SysCtlReset();
-	}
-
 	// FLOW CHART: Read in IV + metadata chunk into memory
 	size = read_frame(ct_buffer);
+
 	// New metadata blob points into plaintext buffer
 	new_mb = (metadata_blob *) &pt_buffer;
 	if (size != sizeof(metadata_blob)) {
@@ -207,8 +198,6 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
-
-	wc_Sha256Update(&hash, ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv));
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 
@@ -352,13 +341,6 @@ void update_firmware(void) {
 		// Write to flash
 		program_flash((void *) addr, ct_buffer, size);
 
-		// Update hash function (this is the cipher text, not the plaintext)
-		if (wc_Sha256Update(&hash, (uint8_t *) ct_buffer, size)) {
-			uart_write_str(UART0, "Crypto oopsie\n");
-			SysCtlReset();
-
-		}
-
 		// Acknowledge this block
 		uart_write_str(UART0, "A");
 	}
@@ -368,26 +350,10 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 
-	// NEW ADDITION! We need to read the signature length because it is now *variable*!
-	signature_length = read_short();
-	if (signature_length > FLASH_PAGESIZE) {
-		uart_write_str(UART0, "Wtf that length is too big\n");
-		while (UARTBusy(UART0_BASE)) {};
-		SysCtlReset();
-	}
-
-	uart_write_hex(UART0, signature_length);
-	nl(UART0);
-
 	//handle signature :D
 	int read = 0;
-	for (int i = 0; i < signature_length; i++) {
+	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
 		ct_buffer[i] = uart_read(UART0, BLOCKING, &read);
-	}
-
-	if (wc_Sha256Final(&hash, &ct_buffer[signature_length]) != 0) {
-		uart_write_str(UART0, "Couldn't compute hash");
-		SysCtlReset();
 	}
 
 	passed = true;
@@ -404,10 +370,9 @@ void update_firmware(void) {
 
 	uart_write_hex(UART0, package_size);
 	uart_write_hex(UART0, addr);
-	if ((edr = wc_ed25519_verify_msg(ct_buffer, signature_length, (uint8_t *) addr, package_size, (int *) &passed, &ed25519)) != 0) {
-		uart_write_hex(UART0, edr);
-		uart_write_hex(UART0, passed);
-		uart_write_str(UART0, "wtf can't do the signature stuff\n");
+
+	if (wc_ed25519_verify_msg(ct_buffer, SECRETS_SIGNATURE_LENGTH, (uint8_t *) addr, package_size, (int *) &passed, &ed25519)) {
+		uart_write_str(UART0, "smh so bad at math can't even calculate a signature\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
@@ -422,7 +387,7 @@ void update_firmware(void) {
 	}
 	addr = (start_block + flash_block_offset) << 10;
 
-	program_flash((void *) addr, ct_buffer, signature_length);
+	program_flash((void *) addr, ct_buffer, SECRETS_SIGNATURE_LENGTH);
 
 	// Store new vault
 	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));
