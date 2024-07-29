@@ -1,5 +1,7 @@
 #include "bootloader.h"
 #include "butils.h"
+#include "computer.h"
+#include "bass.h"
 #include "uart/uart.h"
 
 #include "inc/hw_memmap.h"    // Peripheral Base Addresses
@@ -155,3 +157,22 @@ void uart_write_hex_bytes(uint8_t uart, uint8_t * start, uint32_t len) {
         uart_write_str(uart, " ");
     }
 }
+
+void stupid_computer(void) {
+	uart_write_str(UART0, "Running Dumb Bass program\n");
+	uint8_t stuff[] = {43, 65, 15, 12, 78, 5, 20, 12, 0, 65, 12, 0, 29, 18, 0x00};
+	computer_state state = {0};
+	state.instructions = (computer_instruction *) instructions;
+	state.sys_write_buffer = stuff;
+	state.sys_read_buffer = stuff;
+	state.sys_read_remaining = (sizeof(stuff) - 1);
+	state.sys_write_remaining = (sizeof(stuff) - 1);
+	computer_interpret_program(&state);
+
+	uart_write_str(UART0, "Finishing dumb bass program\n");
+	uart_write_str(UART0, stuff);
+	uart_write_str(UART0, state.memory);
+	while (1) {
+	};
+}
+
