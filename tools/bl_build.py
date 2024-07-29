@@ -65,7 +65,7 @@ def make_bootloader() -> bool:
     generate_keys()
     os.chdir(BOOTLOADER_DIR)
 
-    #subprocess.call("make clean", shell=True)
+    subprocess.call("make clean", shell=True)
     status = subprocess.call("make")
 
     os.chdir(GEN_DIR)
