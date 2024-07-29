@@ -158,6 +158,7 @@ void update_firmware(void) {
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 
+
 	// FLOW CHART: Read in IV + metadata chunk into memory
 	size = read_frame(ct_buffer);
 
@@ -185,13 +186,16 @@ void update_firmware(void) {
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
+
+	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
+	
+
 	// copy in the rest of the unencrypted firmware blob into pt
 	if (wc_AesCtrEncrypt(&aes, pt_buffer + sizeof(new_mb->iv), ct_buffer + sizeof(new_mb->iv), sizeof(metadata_blob) - sizeof(new_mb->iv))) {
 		uart_write_str(UART0, "Idk how to do the funny unencryption thing /shrug\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
-	// FLOW CHART: update hash function w/encrypted metadata block, verify meta data signature
 
 	passed = verify_hmac((uint8_t *) &new_mb->metadata, sizeof(new_mb->metadata), secrets.hmac_key, (uint8_t *) &new_mb->hmac);
 
@@ -355,7 +359,6 @@ void update_firmware(void) {
 	}
 
 	passed = true;
-	//TODO: SIGNATURE CODE bruh
 	
 	// firmware + 1024 bytes message + metadata
 	uart_write_str(UART0, "Funny asymetric stuff\n");
@@ -368,7 +371,7 @@ void update_firmware(void) {
 	}
 
 	// Import a key
-	if (wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) {
+	if (wc_ed25519_import_public_ex(ed25519_public_key, sizeof(ed25519_public_key), &ed25519, true)) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
@@ -562,7 +565,7 @@ void boot_firmware(){
 	}
 
 	// Import a key
-	if (wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) {
+	if (wc_ed25519_import_public_ex(ed25519_public_key, sizeof(ed25519_public_key), &ed25519, true)) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
