@@ -78,15 +78,15 @@ Furthermore, our metadata has the following format:
 Our bootloader reserves two regions of flash called partitions to store firmware in. This way, one partition can contain verified firmware that is
 safe to boot from while another serves as a temporary holding area for new firmware from the updater.
 
-The blocks that the partitions occupy in flash are defined as `STORAGE_PARTA` and `STORAGE_PARTB` in `storage.h`, their sizes are defined s `STORAGE_PART_SIZE`
+The blocks that the partitions occupy in flash are defined as `STORAGE_PARTA` and `STORAGE_PARTB` in `storage.h`, their sizes are defined as `STORAGE_PART_SIZE`
 
 ### Vaults and EEPROM ###
 
 The vault contains information about the currently loaded firmware image. It contains a variable that indicates which partition to boot from, along
-with metadata about the firmware in that partition. The vault is initialized to firmware version 1 and trusting neither partitions.
+with metadata about the firmware in that partition. The vault is initialized to firmware version 1 and trusts neither partitions.
 
-The vault is stored in an EEPROM block along with keys to perform decryption of firmware and HMAC verification. The public key for ec25519 verification
-is stored in flash instead.
+The vault is stored in an EEPROM block along with AES and HMAC keys. The public key for ec25519 verification
+is not stored in EEPROM but flash.
 
 The struct for the vault is defined as `vault_struct` in `storage.h`
 
@@ -112,17 +112,17 @@ When updating, the updater sends a `U` and waits for a `U` back from the bootloa
 
 and waits for an acknowledgement byte back from the bootloader ('A')
 
-The updater starts by sending in a frame containing encrypted metadata, the bootloader verfies if the length of the frame is correct
-and decrypts it, verifying the HMAC signature. If this succeeds, the bootloader will compare the version of this metadata chunk with the
+The updater starts by sending in a frame containing encrypted metadata, the bootloader verifies the length of the frame
+and decrypts it, along with verifying the HMAC signature. If this succeeds, the bootloader will compare the version of this metadata chunk with the
 old version stored in the vault. If the version is satisfactory (version >= old version), the bootloader stores the metadata into flash and continues.
 
-The updater must then send in as many frames of data length 1024 containing encrypted data as it can, sending in a partial frame containing
-the remaining data if the data size is not a multiple of 1024. The bootloader does no verification on these in this step and simply stores
+The updater must then send in as many frames of data length 1024 containing encrypted data as it can. It must send in a partial frame containing
+the remaining data if the data size is not a multiple of 1024. The bootloader does no verification on these frames in this step and simply stores
 them into flash, unless it finds that no space in flash is remaining.
 
 When the updater is finished sending the data, it must send in a frame with the data length set to zero containing the signature. The bootloader
-will take this signature and store the data it has received. If this data is valid, it will change the vault settings to boot from the new partition, along
-with storing metadata information.
+will take this signature and verify the data it has received. If this data is valid, it will change the vault settings to boot from the new partition, along
+with storing the new metadata information.
 
 Metadata data structures are defined in `metadata.h`
 
@@ -133,7 +133,7 @@ Frame code is handled by `fw_update.py` on the updater's side and the function `
 On boot, the bootloader verifies the metadata of the firmware stored in the partition matches that stored in the vault. The bootloader will also verify
 the ed25119 signature before going on.
 
-The bootloader will then decrypt the release message and print it out, before decrypting the firmware into RAM and executing it.
+The bootloader will then decrypt the release message and prints it out, before decrypting the firmware into RAM and executing it.
 
 ## Tools
 
