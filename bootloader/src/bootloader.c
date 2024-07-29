@@ -34,7 +34,7 @@
 #include "wolfssl/wolfcrypt/sha.h"
 #include "wolfssl/wolfcrypt/hmac.h"
 
-#include "wolfssl/wolfcrypt/ecc.h"
+#include "wolfssl/wolfcrypt/ed25519.h"
 
 // Forward Declarations
 void update_firmware(void);
@@ -126,6 +126,8 @@ void update_firmware(void) {
 	// EEPROM/flash results
 	int result = 0;
 	uint32_t size; 						// frame size read in
+	uint16_t signature_length;			// Signature read in
+	uint32_t package_size;				// Calculate size of package for verification
 
 	uint32_t old_version;			 	// version of current firmware
 
@@ -143,18 +145,20 @@ void update_firmware(void) {
 										// Useful crypto stuff
 	wc_Sha256 hash;
 	Aes aes;
-	ecc_key ecc;
+	ed25519_key ed25519;
 
 	// Set up ecc
-	if (wc_ecc_init(&ecc)) {
-		uart_write_str(UART0, "No memory for ecc key :(\n");
+	if (wc_ed25519_init(&ed25519)) {
+		uart_write_str(UART0, "No memory for ed25519 key :(\n");
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
 
 	// Import a key
-	if (wc_ecc_import_x963(ecc_public_key, sizeof(ecc_public_key), &ecc)) {
+	uint32_t edr;
+	if ((edr = wc_ed25519_import_public(ed25519_public_key, sizeof(ed25519_public_key), &ed25519)) != 0) {
 		uart_write_str(UART0, "Can't init a key smfh\n");
+		uart_write_hex(UART0, edr);
 		while (UARTBusy(UART0_BASE)) {}
 		SysCtlReset();
 	}
@@ -365,13 +369,13 @@ void update_firmware(void) {
 	}
 
 	// NEW ADDITION! We need to read the signature length because it is now *variable*!
-	uint16_t signature_length;
 	signature_length = read_short();
-	if (signature_length > 128) {
+	if (signature_length > FLASH_PAGESIZE) {
 		uart_write_str(UART0, "Wtf that length is too big\n");
 		while (UARTBusy(UART0_BASE)) {};
 		SysCtlReset();
 	}
+
 	uart_write_hex(UART0, signature_length);
 	nl(UART0);
 
@@ -387,27 +391,27 @@ void update_firmware(void) {
 	}
 
 	passed = true;
-	/*
-	// TODO: Use funny ecc thing instead of this crap
-	for (int i = 0; i < SECRETS_SIGNATURE_LENGTH; i++) {
-		if (ct_buffer[i] != ct_buffer[SECRETS_SIGNATURE_LENGTH + i]) {
-			passed = false;
-		}
-	}
-	*/
-	//passed = 0;
+	//TODO: SIGNATURE CODE bruh
 	
-	uint32_t ecc_result;
+	// firmware + 1024 bytes message + metadata
+	uart_write_str(UART0, "Funny asymetric stuff\n");
 
-	uart_write_str(UART0, "Calculating...\n");
-	ecc_result = wc_ecc_verify_hash(ct_buffer, signature_length, &ct_buffer[signature_length], SECRETS_HASH_LENGTH, (int *) &passed, &ecc) ;
-	if (ecc_result) {
-		uart_write_str(UART0, "could not do basic math :sob:");
-		uart_write_hex(UART0, ecc_result);
-		while (UARTBusy(UART0_BASE)) {};
+	package_size = vault.fw_length + FLASH_PAGESIZE + sizeof(metadata_blob) - SECRETS_IV_LEN;
+	// Padding
+	package_size += SECRETS_ENCRYPTION_BLOCK_LENGTH - (package_size % SECRETS_ENCRYPTION_BLOCK_LENGTH);
+
+	addr = (start_block << 10) + FLASH_PAGESIZE - sizeof(metadata_blob) + SECRETS_IV_LEN;
+
+	uart_write_hex(UART0, package_size);
+	uart_write_hex(UART0, addr);
+	if ((edr = wc_ed25519_verify_msg(ct_buffer, signature_length, (uint8_t *) addr, package_size, (int *) &passed, &ed25519)) != 0) {
+		uart_write_hex(UART0, edr);
+		uart_write_hex(UART0, passed);
+		uart_write_str(UART0, "wtf can't do the signature stuff\n");
+		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
-
 	}
+
 	uart_write_str(UART0, "Finished!\n");
 
 	if (passed) {
@@ -417,7 +421,8 @@ void update_firmware(void) {
 		SysCtlReset();
 	}
 	addr = (start_block + flash_block_offset) << 10;
-	program_flash((void *) addr, ct_buffer, SECRETS_SIGNATURE_LENGTH);
+
+	program_flash((void *) addr, ct_buffer, signature_length);
 
 	// Store new vault
 	result = EEPROMProgram((uint32_t *)&vault, SECRETS_VAULT_OFFSET, sizeof(vault));

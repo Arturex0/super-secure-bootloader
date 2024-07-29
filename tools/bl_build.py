@@ -26,10 +26,11 @@ def generate_keys():
     decrypt_key=os.urandom(KEY_SIZE)
     hmac_key=os.urandom(KEY_SIZE)
 
-    ecc_key = ECC.generate(curve='p256')
+    ecc_key = ECC.generate(curve='ed25519')
 
     private = ecc_key.export_key(format='DER')
-    public = ecc_key.public_key().export_key(format='SEC1')
+    public = ecc_key.public_key().export_key(format='raw')
+    print(len(public))
 
     header_guard = \
 """
@@ -39,12 +40,13 @@ def generate_keys():
 """
     header_tail = "#endif"
 
-    result = 'const uint8_t ecc_public_key[] = {'
+    result = 'const uint8_t ed25519_public_key[] = {'
     for c in public:
         result += hex(c) + ", "
     result = result[:-2]
     result = result + '};\n'
 
+    print(f"Writing to {PUBLIC_FILE}")
     with open(PUBLIC_FILE, 'w') as f:
         f.write(header_guard)
         f.write(result)
@@ -60,6 +62,7 @@ def generate_keys():
 def make_bootloader() -> bool:
     # Build the bootloader from source.
 
+    generate_keys()
     os.chdir(BOOTLOADER_DIR)
 
     #subprocess.call("make clean", shell=True)
@@ -68,7 +71,6 @@ def make_bootloader() -> bool:
     os.chdir(GEN_DIR)
 
     if status == 0:
-        generate_keys()
         subprocess.call("make clean", shell=True)
         status = subprocess.call("make", shell=True)
 
