@@ -5,8 +5,8 @@
 #include "storage.h"
 #include "butils.h"
 #include "user_settings.h"
-#include "interpreter.c"
 #include "public.h"
+#include "bf.h"
 
 // DUMB BASS !!!!!!
 #include "computer.h"
@@ -47,11 +47,11 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size, Aes *cipher);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
-void bf_decrypt(uint8_t *, uint8_t);
 
 typedef void (*pFunction)(void);
 
 #undef SCREW_OVER_MY_BOARD
+#undef DEBUG
 
 //crypto state
 
@@ -154,13 +154,14 @@ void update_firmware(void) {
 
 
 	vault_struct vault;
-	uart_write_str(UART0, "U");
 
 	// Read secrets from EEPROM and hide block, preventing further access
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
 	bf_decrypt(secrets.hmac_key, 16);
 	bf_decrypt(secrets.decrypt_key, 16);
+
+	uart_write_str(UART0, "U");
 
 
 	// FLOW CHART: Read in IV + metadata chunk into memory
@@ -231,7 +232,9 @@ void update_firmware(void) {
 			//new_permissions = STORAGE_TRUST_B;
 			vault.s = STORAGE_TRUST_B;
 
+			#ifdef DEBUG
 			uart_write_str(UART0, "Trust a\n");
+			#endif
 
 			break;
 		// Write to partition A, read old metadata from partition B
@@ -239,14 +242,18 @@ void update_firmware(void) {
 			start_block = STORAGE_PARTA;
 			//new_permissions = STORAGE_TRUST_A;
 			vault.s = STORAGE_TRUST_A;
+			#ifdef DEBUG
 			uart_write_str(UART0, "Trust b\n");
+			#endif
 
 			break;
 		// By default write to A, firmware version is always 1	
 		case STORAGE_TRUST_NONE:
 			start_block = STORAGE_PARTA;
 			//new_permissions = STORAGE_TRUST_A;
+			#ifdef DEBUG
 			vault.s = STORAGE_TRUST_A;
+			#endif
 
 			uart_write_str(UART0, "Trust no one\n");
 	}
@@ -259,7 +266,9 @@ void update_firmware(void) {
 
 	// FLOW CHART: Metadata version good?
 	if (new_mb->metadata.fw_version < old_version) {
+		#ifdef DEBUG
 		uart_write_str(UART0, "It is evolving, just backwards\n");
+		#endif
 		while(UARTBusy(UART0_BASE)){}
 		SysCtlReset();
 	}
@@ -468,10 +477,11 @@ void boot_firmware(){
 	switch (vault.s) {
 		case STORAGE_TRUST_A:
 
-			// TODO: VERIFY FIRMWARE !!!
 
 			mb = (metadata_blob *) ((STORAGE_PARTA << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
+			#ifdef DEBUG
 			uart_write_str(UART0, "I'm gonna boot from A :D\n");
+			#endif
 
 			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTA + 1) << 10);
@@ -484,7 +494,9 @@ void boot_firmware(){
 			mb = (metadata_blob *) ((STORAGE_PARTB << 10) + FLASH_PAGESIZE - sizeof(metadata_blob));
 
 			// DELETE THE MESSAGE ||
+			#ifdef DEBUG
 			uart_write_str(UART0, "I'm gonna boot from B :D\n");
+			#endif
 
 			//Calculate the message address 
 			m_addr = (uint8_t *) ((STORAGE_PARTB + 1) << 10);
@@ -493,13 +505,17 @@ void boot_firmware(){
 			break;
 
 		case STORAGE_TRUST_NONE:
-			uart_write_str(UART0, "No fw in installed, plese update\n");
+			#ifdef DEBUG
+			uart_write_str(UART0, "No fw in installed, please update\n");
+			#endif
 			while(UARTBusy(UART0_BASE)){}
 			SysCtlReset();
 			return;
 
 		default:
+			#ifdef DEBUG
             uart_write_str(UART0, "Unknown trust state\n");
+			#endif
 			while(UARTBusy(UART0_BASE)){}
             SysCtlReset();
             return;
@@ -696,6 +712,3 @@ unsigned int my_rng_seed_gen(void) {
 				// guaranteed to be random
 }
 
-void bf_decrypt(uint8_t* ct, uint8_t len) {
-	uart_write_str(UART0, "idk what i'm supposed to do\n");
-}
