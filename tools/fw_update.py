@@ -27,8 +27,6 @@ from pwn import *
 import time
 import serial
 
-from util import *
-
 
 ser = ""
 
