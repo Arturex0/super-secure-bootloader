@@ -2,11 +2,17 @@ import sys
 from assembly_defs import *
 from pwn import *
 
-if (len(sys.argv) != 3):
+if (len(sys.argv) < 3):
     print(f"Usage: {sys.argv[0]} <infile> <outfile>")
+    exit()
 
 ifile = sys.argv[1]
 ofile = sys.argv[2]
+
+makec = True
+if (len(sys.argv) >= 4):
+    makec = False
+
 
 user_labels = {}
 
@@ -28,7 +34,6 @@ for line in data:
     if first[0] == '<':
         user_labels[first] = current_addr
         print(f"Label {first} @ {current_addr}")
-
 
 
 print("compiler run")
@@ -93,13 +98,17 @@ top = """
 
 
 result = 'const uint8_t instructions[] = {'
-for c in final:
-    result += hex(c) + ", "
-for i in range(256 * 3 - len(final)):
-    result += hex(0) + ", "
-result = result[:-2]
-result += '};\n'
-#print(result)
-with open(ofile, 'w') as f:
-    f.write(top)
-    f.write(result)
+if makec:
+    for c in final:
+        result += hex(c) + ", "
+    for i in range(256 * 3 - len(final)):
+        result += hex(0) + ", "
+    result = result[:-2]
+    result += '};\n'
+    #print(result)
+    with open(ofile, 'w') as f:
+        f.write(top)
+        f.write(result)
+else:
+    with open(ofile, 'wb') as f:
+        f.write(final)
