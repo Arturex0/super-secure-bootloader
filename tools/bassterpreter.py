@@ -28,6 +28,8 @@ class State:
         ending = False
 
         match opcode:
+            case basscodes.COMP_MOV_CODE:
+                self.mov(a, b)
             case basscodes.COMP_ADD_CODE:
                 self.add(a, b)
             case basscodes.COMP_SUB_CODE:
@@ -48,7 +50,7 @@ class State:
                 self.jmp(a, b)
             case basscodes.COMP_JNE_CODE:
                 inc_ins = False
-                self.JNE(a, b)
+                self.jne(a, b)
             case basscodes.COMP_JLT_CODE:
                 inc_ins = False
                 self.jlt(a, b)
@@ -60,11 +62,10 @@ class State:
             case basscodes.COMP_ORR_CODE:
                 self.orr(a, b)
             case basscodes.COMP_XOR_CODE:
-                self.xor(a, b)
+                self.int_xor(a, b)
             case _:
                 ending = True
-                print("Wtf bad instruction")
-        print("incing")
+                print(f"Wtf bad instruction {opcode}")
         if inc_ins:
             self.ip += 1
         return ending
@@ -86,7 +87,7 @@ class State:
             case basscodes.COMP_RF_MASK:
                 return self.rf
             case _:
-                print("Bad register number")
+                print(f"Bad register number {reg}")
 
     def wr(self, reg, v):
         if (v < 0) or (v > 255):
@@ -107,6 +108,9 @@ class State:
                 self.rf = v
             case _:
                 print("Bad register number")
+
+    def mov(self, ra, rb):
+        self.wr(ra, self.rr(rb))
     
     def add(self, ra, rb):
         self.wr(ra, (self.rr(ra) + self.rr(rb)) & 0xFF)
@@ -124,14 +128,14 @@ class State:
         a = self.rr(ra)
         b = self.rr(rb)
         negb = 0x100 - b
-        res = a + negb
+        result = a + negb
 
         signa = (a >> 7) & 1
         signb = (b >> 7) & 1
 
         signr = (result >> 7) & 1
         carry = (result >> 8) & 1
-        zero = 1 if (result == 0) else 0
+        zero = 1 if ((result & 0xff) == 0) else 0
         overflow = 1 if ((not (signa ^ signb)) and (signr ^ signa)) else 0
         self.fl = signr << basscodes.COMP_FLAG_SIGN_SHIFT | \
             carry << basscodes.COMP_FLAG_CARRY_SHIFT | \
@@ -177,7 +181,7 @@ class State:
 
     def jne(self, a, b):
         self.ip += 1
-        if (self.fl >> basscodes.COMP_FLAG_ZERO_SHIFT) & 1:
+        if not ((self.fl >> basscodes.COMP_FLAG_ZERO_SHIFT) & 1):
             self.ip = a
 
     def int_and(self, ra, rb):
@@ -189,6 +193,6 @@ class State:
     def orr(self, ra, rb):
         self.wr(ra, self.rr(ra) | self.rr(rb))
     
-    def xor(self, ra, rb):
+    def int_xor(self, ra, rb):
         self.wr(ra, self.rr(ra) ^ self.rr(rb))
 

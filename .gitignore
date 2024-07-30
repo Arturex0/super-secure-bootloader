@@ -11,6 +11,9 @@ cscope*
 
 ## C
 
+# Dumb bass objects
+*.do
+
 # Prerequisites
 *.d
 
