@@ -46,6 +46,7 @@ void uart_write_hex_bytes(uint8_t, uint8_t *, uint32_t);
 bool verify_hmac(uint8_t * data, uint32_t data_len, uint8_t * key, uint8_t * test_hash);
 void copy_fw_to_ram(uint32_t *fw_ptr, uint32_t *sram_ptr, uint32_t fw_size, Aes *cipher);
 void jump_to_fw(uint32_t sram_start, uint32_t sram_end);
+void bf_decrypt(uint8_t *, uint8_t);
 
 typedef void (*pFunction)(void);
 
@@ -157,6 +158,8 @@ void update_firmware(void) {
 	// Read secrets from EEPROM and hide block, preventing further access
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
+	bf_decrypt(secrets.hmac_key, 16);
+	bf_decrypt(secrets.decrypt_key, 16);
 
 
 	// FLOW CHART: Read in IV + metadata chunk into memory
@@ -454,6 +457,8 @@ void boot_firmware(){
 	// Read secrets from EEPROM and hide block, preventing further access
 	EEPROMRead((uint32_t *) &secrets, SECRETS_EEPROM_OFFSET, sizeof(secrets));
 	EEPROMBlockHide(EEPROMBlockFromAddr(SECRETS_EEPROM_OFFSET));
+	bf_decrypt(secrets.hmac_key, 16);
+	bf_decrypt(secrets.decrypt_key, 16);
 
 	if (vault.magic == VAULT_MAGIC) {
 		uart_write_str(UART0, "No corrupted vault :D\n");
@@ -688,4 +693,8 @@ unsigned int my_rng_seed_gen(void) {
 	SysCtlReset();
 	return 4;	// chosen by fair dice roll
 				// guaranteed to be random
+}
+
+void bf_decrypt(uint8_t* ct, uint8_t len) {
+	return;
 }
