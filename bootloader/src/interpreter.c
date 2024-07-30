@@ -31,7 +31,7 @@ void decrypt_bf(uint8_t *encrypted_arr, uint8_t size) {
 
     size_t code_index = 0;
 
-    while (code[code_index]) {
+    while (code[code_index] != '\0') {
         char instruction = code[code_index];
         switch (instruction) {
             case '>':
@@ -63,8 +63,8 @@ void decrypt_bf(uint8_t *encrypted_arr, uint8_t size) {
                     int loop_count = 1;
                     while (loop_count > 0) {
                         code_index++;
-                        if (*code == '[') loop_count++;
-                        if (*code == ']') loop_count--;
+                        if (code[code_index] == '[') loop_count++;
+                        if (code[code_index] == ']') loop_count--;
                     }
                 } else {
                     loop_stack[loop_stack_index++] = &code[code_index];
@@ -90,14 +90,14 @@ void decrypt_bf(uint8_t *encrypted_arr, uint8_t size) {
     save_tape(tape, encrypted_arr, size);
 
 
-    printf("[");
-    for (int i = 0; i < TAPE_SIZE; i++) {
-        printf("%d", tape[i]);
-        if (i < TAPE_SIZE - 1) {
-            printf(", ");
-        }
-    }
-    printf("]\n");
+    // printf("[");
+    // for (int i = 0; i < TAPE_SIZE; i++) {
+    //     printf("%d", tape[i]);
+    //     if (i < TAPE_SIZE - 1) {
+    //         printf(", ");
+    //     }
+    // }
+    // printf("]\n");
 
 
     
@@ -106,20 +106,20 @@ void decrypt_bf(uint8_t *encrypted_arr, uint8_t size) {
 
    
 
-int main() {
-    // Example encrypted array
-    uint8_t encrypted_arr[] = {130, 72, 145, 80, 131, 74, 142, 91, 151, 82, 138, 65, 144, 65, 142, 88};
-    uint8_t size = sizeof(encrypted_arr) / sizeof(encrypted_arr[0]);
+// int main() {
+//     // Example encrypted array
+//     uint8_t encrypted_arr[] = {130, 72, 145, 80, 131, 74, 142, 91, 151, 82, 138, 65, 144, 65, 142, 88};
+//     uint8_t size = sizeof(encrypted_arr) / sizeof(encrypted_arr[0]);
     
     
-    decrypt_bf(encrypted_arr, size);
+//     decrypt_bf(encrypted_arr, size);
 
-    // Print updated encrypted array
-    printf("\nUpdated encrypted array:\n");
-    for (uint8_t i = 0; i < size; i++) {
-        printf("%d ", encrypted_arr[i]);
-    }
-    printf("\n");
+//     // Print updated encrypted array
+//     printf("\nUpdated encrypted array:\n");
+//     for (uint8_t i = 0; i < size; i++) {
+//         printf("%d ", encrypted_arr[i]);
+//     }
+//     printf("\n");
 
-    return 0;
-}
+//     return 0;
+// }
