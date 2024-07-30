@@ -16,6 +16,7 @@ of = sys.argv[2]
 with open(inf, 'r') as f:
     decrypt_key = bytes.fromhex(f.readline())
     hmac_key = bytes.fromhex(f.readline())
+
     decrypt_key = bf_encrypt(decrypt_key)
     hmac_key = bf_encrypt(hmac_key)
 data = decrypt_key + hmac_key

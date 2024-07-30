@@ -696,5 +696,5 @@ unsigned int my_rng_seed_gen(void) {
 }
 
 void bf_decrypt(uint8_t* ct, uint8_t len) {
-	return;
+	uart_write_str(UART0, "idk what i'm supposed to do\n");
 }
