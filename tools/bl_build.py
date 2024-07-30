@@ -10,6 +10,7 @@ import os
 import pathlib
 import subprocess
 from Crypto.PublicKey import ECC
+from encrypt_util import bf_encrypt
 
 #change this once we decide on algorithm
 KEY_SIZE=16
@@ -26,10 +27,22 @@ def generate_keys():
     decrypt_key=os.urandom(KEY_SIZE)
     hmac_key=os.urandom(KEY_SIZE)
 
+    decrypt_bf = bf_encrypt(decrypt_key)
+    hmac_key_bf = bf_encrypt(hmac_key)
+
+    while ((b'\x00' in decrypt_bf) or (b'\x00' in hmac_key_bf)):
+        decrypt_key=os.urandom(KEY_SIZE)
+        hmac_key=os.urandom(KEY_SIZE)
+
+        decrypt_bf = bf_encrypt(decrypt_key)
+        hmac_key_bf = bf_encrypt(hmac_key)
+
     ecc_key = ECC.generate(curve='ed25519')
 
     private = ecc_key.export_key(format='DER')
     public = ecc_key.public_key().export_key(format='raw')
+
+    
     print(len(public))
 
     header_guard = \

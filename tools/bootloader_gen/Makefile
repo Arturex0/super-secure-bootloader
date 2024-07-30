@@ -4,8 +4,10 @@ SECRETS_FILE=../secret_build_output.txt
 
 all: bl_ready.bin
 
-bl_ready.bin: super_secret.magic ${BOOT_LOADER_DIR}/bin/bootloader.bin
-	python3 add_secrets.py --infile ${BOOT_LOADER_DIR}/bin/bootloader.bin --contents super_secret.magic --outfile bl_ready.bin
+bl_ready.bin: super_secret.magic ${BOOT_LOADER_DIR}/bin/bootloader_unready.bin
+	python3 add_secrets.py --infile ${BOOT_LOADER_DIR}/bin/bootloader_unready.bin --contents super_secret.magic --outfile bl_ready.bin
+	cp bl_ready.bin ${BOOT_LOADER_DIR}/bin/bootloader.bin
+
 
 super_secret.magic: ${SECRETS_FILE}
 	python3 add_magic.py ${SECRETS_FILE} super_secret.magic
