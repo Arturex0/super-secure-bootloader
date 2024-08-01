@@ -56,6 +56,8 @@ typedef void (*pFunction)(void);
 //crypto state
 
 uint8_t message[READ_BUFFER_SIZE];
+const secrets_struct empty_secrets = {0};
+const Aes empty_aes = {0};
 
 // FLOW CHART: Initialize import state
 
@@ -251,11 +253,11 @@ void update_firmware(void) {
 		case STORAGE_TRUST_NONE:
 			start_block = STORAGE_PARTA;
 			//new_permissions = STORAGE_TRUST_A;
-			#ifdef DEBUG
 			vault.s = STORAGE_TRUST_A;
-			#endif
 
+			#ifdef DEBUG
 			uart_write_str(UART0, "Trust no one\n");
+			#endif
 	}
 	// Not needed afterwards so throw it away
 
@@ -638,6 +640,10 @@ void boot_firmware(){
 	copy_fw_to_ram((uint32_t *) addr, \
 			(uint32_t *) 0x20000000, decrypted_metadata.metadata.fw_length, &aes);
 	bass_crypt((uint8_t *) 0x20000000, decrypted_metadata.metadata.fw_length);
+
+	// Zero out secrets
+	aes = empty_aes;
+	secrets = empty_secrets;
 	
 	jump_to_fw(0x20000001, 0x20007FF0);
 
